@@ -201,8 +201,22 @@ void Server::handleCommand(IRCmessage msg, int fd)
 		_clients[fd].setNick(msg.args[0]);
 	if (msg.cmd == "USER")
 		_clients[fd].setUser(msg.args[0]);
+
+
 	// JOIN to join channels
-		//if no channel, create a channel
+	join(name)
+	if (name in channel)
+		_channels[name].push_back(_clients[fd]);
+		std::cout << "guys in the channel now\n";
+	else
+		Channel ch;
+		ch._clients.push_back(_clients[fd]);
+		ch._operators.push_back(fd);
+		std::pair<std::string, Channel> newChannel;
+		newChannel.first = "channel_name";
+		newChannel.second = ch;
+		_channels.insert(newChannel);
+		
 	// PRIVMSG for messaging
 
 // somehow check is client operator of the channel??
