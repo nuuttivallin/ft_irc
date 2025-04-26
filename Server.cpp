@@ -112,13 +112,12 @@ void Server::startServer()
 							IRCmessage msg = parse(*it);
 							handleCommand(msg, _pfds[i].fd);
 
-							// printing message and echoing it back just for debugging atm					
+							// printing message just for debugging atm					
 							std::cout << "prefix: " << msg.prefix << " cmd: " << msg.cmd << std::endl;
 							for (std::vector<std::string>::iterator it = msg.args.begin(); it < msg.args.end(); it++)
 								std::cout << "arg: " << *it << "\n";
 							std::cout << "\n";				
 						}
-						send(_pfds[i].fd, buffer, sizeof(buffer), 0);
 					}
 				}
 			}
@@ -157,6 +156,8 @@ std::vector<std::string> Server::splitLines(const std::string msg)
         lines.push_back(msg.substr(start, end - start));
         start = end + 2;
     }
+	if (lines.empty())
+		lines.push_back(msg);
     return (lines);
 }
 
@@ -189,47 +190,60 @@ Server::IRCmessage Server::parse(const std::string input)
 
 void Server::handleCommand(IRCmessage msg, int fd)
 {
+	std::string response;
 	if (!_clients[fd].isRegistered)
 	{
 		if (msg.cmd == "NICK")
+		{
 			_clients[fd].setNick(msg.args[0]);
+			response = ":" + msg.args[0] + " NICK :" + msg.args[0] + "\r\n";
+			send(fd, response.c_str(), response.size(), 0);
+		}
 		if (msg.cmd == "USER")
 			_clients[fd].setUser(msg.args[0]);
 		registerClient(fd);
 	}
-	if (msg.cmd == "NICK")
-		_clients[fd].setNick(msg.args[0]);
-	if (msg.cmd == "USER")
-		_clients[fd].setUser(msg.args[0]);
-
-
-	// JOIN to join channels
-	join(name)
-	if (name in channel)
-		_channels[name].push_back(_clients[fd]);
-		std::cout << "guys in the channel now\n";
 	else
-		Channel ch;
-		ch._clients.push_back(_clients[fd]);
-		ch._operators.push_back(fd);
-		std::pair<std::string, Channel> newChannel;
-		newChannel.first = "channel_name";
-		newChannel.second = ch;
-		_channels.insert(newChannel);
-		
-	// PRIVMSG for messaging
+	{
+		if (msg.cmd == "NICK")
+		{
+			response = ":" + _clients[fd].getNick() + " NICK :" + msg.args[0] + "\r\n";
+			// actually send to all
+			send(fd, response.c_str(), response.size(), 0);		
+			_clients[fd].setNick(msg.args[0]);
+		}
+		if (msg.cmd == "USER")
+			_clients[fd].setUser(msg.args[0]);
 
-// somehow check is client operator of the channel??
-	/* for operators:
-			KICK - Eject a client from the channel
-			INVITE - Invite a client to a channel
-			TOPIC - Change or view the channel topic
-			MODE - Change the channel’s mode:
-				i: Set/remove Invite-only channel
-				t: Set/remove the restrictions of the TOPIC command to channel operator
-				k: Set/remove the channel key (password)
-				o: Give/take channel operator privilege
-				l: Set/remove the user limit to channel */
+
+		// JOIN to join channels
+		// join(name)
+		// if (name in channel)
+		// 	_channels[name].push_back(_clients[fd]);
+		// 	std::cout << "guys in the channel now\n";
+		// else
+		// 	Channel ch;
+		// 	ch._clients.push_back(_clients[fd]);
+		// 	ch._operators.push_back(fd);
+		// 	std::pair<std::string, Channel> newChannel;
+		// 	newChannel.first = "channel_name";
+		// 	newChannel.second = ch;
+		// 	_channels.insert(newChannel);
+			
+		// PRIVMSG for messaging
+
+	// somehow check is client operator of the channel??
+		/* for operators:
+				KICK - Eject a client from the channel
+				INVITE - Invite a client to a channel
+				TOPIC - Change or view the channel topic
+				MODE - Change the channel’s mode:
+					i: Set/remove Invite-only channel
+					t: Set/remove the restrictions of the TOPIC command to channel operator
+					k: Set/remove the channel key (password)
+					o: Give/take channel operator privilege
+					l: Set/remove the user limit to channel */
+	}
 }
 
 void Server::registerClient(int fd)
