@@ -12,6 +12,8 @@
 
 #pragma once
 #include <iostream>
+#include <queue>
+#include <sys/socket.h>
 
 class Client
 {
@@ -27,11 +29,17 @@ class Client
 		std::string getReal();
 		void setReal(std::string real);
 		bool isRegistered;
+		bool negotiating;
+		void queueMessage(const std::string msg);
+		void sendData();
+		bool hasDataToSend();
 	private:
 		int _fd;
 		std::string _ipAdd;
 		std::string _nickname;
 		std::string _username;
 		std::string _realname;
+		std::queue<std::string> _sendQueue;
+		std::string _partialSend;
 };
 		

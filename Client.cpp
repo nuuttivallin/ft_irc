@@ -15,6 +15,7 @@
 Client::Client()
 {
 	isRegistered = false;
+	negotiating = false;
 }
 
 int Client::getFd()
@@ -60,4 +61,38 @@ std::string Client::getReal()
 void Client::setReal(std::string real)
 {
 	_realname = real;
+}
+
+void Client::queueMessage(const std::string msg)
+{
+	_sendQueue.push(msg);
+}
+
+bool Client::hasDataToSend()
+{
+    return (!_sendQueue.empty() || !_partialSend.empty());
+}
+
+void Client::sendData()
+{
+	std::string msg;
+	while (!_sendQueue.empty() || !_partialSend.empty())
+	{
+		if (_partialSend.empty())
+			msg = _sendQueue.front();
+		else
+			msg = _partialSend;
+		size_t bytesSent = send(_fd, msg.c_str(), msg.size(), 0);
+		if (bytesSent < msg.size())
+		{
+			_partialSend = msg.substr(bytesSent);
+			break;
+		}
+		else
+		{
+			_partialSend.clear();
+			if (!_sendQueue.empty())
+				_sendQueue.pop();
+		}
+	}
 }
