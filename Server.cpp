@@ -1,0 +1,242 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   Server.cpp                                         :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: nvallin <nvallin@student.hive.fi>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2025/04/19 20:18:18 by nvallin           #+#    #+#             */
+/*   Updated: 2025/04/19 20:18:27 by nvallin          ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#include "Server.hpp"
+
+Server::Server(std::string port)
+{
+	_fd = -1;
+	if (checkPort(port) == -1)
+		throw (std::runtime_error("invalid port"));
+}
+
+void Server::acceptNewClient()
+{
+	Client newClient;
+	struct sockaddr_in clientAddress;
+	socklen_t clientAddressLen = sizeof(clientAddress);
+	struct pollfd new_pfd;
+
+	newClient.setFd(accept(_fd, (struct sockaddr*)&clientAddress, &clientAddressLen));
+	if (newClient.getFd() == -1)
+	{
+		std::cout << "couldn't accept client\n";
+		return ;
+	}
+	if (fcntl(newClient.getFd(), F_SETFL, O_NONBLOCK) == -1)
+	{
+		std::cout << "couldn't set client to O_NONBLOCK\n";
+		return ;
+	}
+
+	new_pfd.fd = newClient.getFd();
+	new_pfd.events = POLLIN;
+	new_pfd.revents = 0;
+
+	_pfds.push_back(new_pfd);
+
+	newClient.setIpAdd(inet_ntoa(clientAddress.sin_addr));
+	std::pair<int, Client> ncli;
+	ncli.first = newClient.getFd();
+	ncli.second = newClient;
+	_clients.insert(ncli);
+
+	std::cout << "Client " << newClient.getFd() << " connected\n";
+}
+
+void Server::startServer()
+{
+	extern bool quit;
+	struct pollfd new_pfd;
+	struct sockaddr_in serverAddress;	
+	int optval = 1;
+
+	serverAddress.sin_family = AF_INET;
+	serverAddress.sin_port = htons(_port);
+	serverAddress.sin_addr.s_addr = INADDR_ANY;
+
+	_fd = socket(AF_INET, SOCK_STREAM, 0);
+	if (_fd == -1)
+		throw (std::runtime_error("socket"));
+	if (setsockopt(_fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) == -1)
+		throw (std::runtime_error("SO_REUSEADDR"));
+	if (fcntl(_fd, F_SETFL, O_NONBLOCK) == -1)
+		throw (std::runtime_error("O_NONBLOCK"));
+	if (bind(_fd, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) == -1)
+		throw (std::runtime_error("bind"));
+	if (listen(_fd, 5) == -1)
+		throw (std::runtime_error("listen"));
+
+	std::cout << "Server listening on port " << _port << "\n";
+
+	new_pfd.fd = _fd;
+	new_pfd.events = POLLIN;
+	new_pfd.revents = 0;
+
+	_pfds.push_back(new_pfd);
+
+	while (!quit)
+	{
+		if (poll(&_pfds[0], _pfds.size(), -1) == -1)
+			throw (std::runtime_error("poll"));
+		for (size_t i = 0; i < _pfds.size(); i++)
+		{
+			if (_pfds[i].revents & POLLIN)
+			{
+				if (_pfds[i].fd == _fd)
+					acceptNewClient();
+				else
+				{
+					char buffer[1024] = { 0 };
+					if (recv(_pfds[i].fd, buffer, sizeof(buffer), 0) <= 0)
+					{
+						std::cout << "Client " << _pfds[i].fd << " disconnected\n";
+						_clients.erase(_pfds[i].fd);					
+						close(_pfds[i].fd);
+						_pfds.erase(_pfds.begin() + i);
+					}
+					else
+					{
+						std::vector<std::string> lines = splitLines(buffer);
+						for (std::vector<std::string>::iterator it = lines.begin(); it < lines.end(); it++)
+						{
+							IRCmessage msg = parse(*it);
+							handleCommand(msg, _pfds[i].fd);
+
+							// printing message and echoing it back just for debugging atm					
+							std::cout << "prefix: " << msg.prefix << " cmd: " << msg.cmd << std::endl;
+							for (std::vector<std::string>::iterator it = msg.args.begin(); it < msg.args.end(); it++)
+								std::cout << "arg: " << *it << "\n";
+							std::cout << "\n";				
+						}
+						send(_pfds[i].fd, buffer, sizeof(buffer), 0);
+					}
+				}
+			}
+		}
+	}
+	for (size_t i = 0; i < _pfds.size(); i++)
+		close(_pfds[i].fd);
+}
+
+int Server::checkPort(std::string input)
+{
+	double port = 0;
+	for (size_t i = 0; i < input.size(); i++)
+	{
+		if (std::isdigit(input[i]))
+		{
+			port *= 10;
+			port += input[i] - '0';
+		}
+		else
+			return (-1);
+	}
+	if (port < 1024 || port > 65535)
+		return (-1);
+	_port = port;
+	return (port);
+}
+
+std::vector<std::string> Server::splitLines(const std::string msg)
+{
+	std::vector<std::string> lines;
+    size_t start = 0;
+    size_t end;
+    while ((end = msg.find("\r\n", start)) != std::string::npos)
+	{
+        lines.push_back(msg.substr(start, end - start));
+        start = end + 2;
+    }
+    return (lines);
+}
+
+Server::IRCmessage Server::parse(const std::string input)
+{
+	IRCmessage msg;
+	std::istringstream instream(input);
+	std::string word;
+
+	if (input[0] == ':')
+	{
+		instream >> word;
+		msg.prefix = word.substr(1);
+	}
+	instream >> msg.cmd;
+	while (instream >> word)
+	{
+		if (word[0] == ':')
+		{
+			std::string trailing;	
+			getline(instream, trailing);
+			word.append(trailing);
+			msg.args.push_back(word.substr(1));
+		}
+		else
+			msg.args.push_back(word);
+	}
+	return (msg);
+}
+
+void Server::handleCommand(IRCmessage msg, int fd)
+{
+	if (!_clients[fd].isRegistered)
+	{
+		if (msg.cmd == "NICK")
+			_clients[fd].setNick(msg.args[0]);
+		if (msg.cmd == "USER")
+			_clients[fd].setUser(msg.args[0]);
+		registerClient(fd);
+	}
+	if (msg.cmd == "NICK")
+		_clients[fd].setNick(msg.args[0]);
+	if (msg.cmd == "USER")
+		_clients[fd].setUser(msg.args[0]);
+	// JOIN to join channels
+		//if no channel, create a channel
+	// PRIVMSG for messaging
+
+// somehow check is client operator of the channel??
+	/* for operators:
+			KICK - Eject a client from the channel
+			INVITE - Invite a client to a channel
+			TOPIC - Change or view the channel topic
+			MODE - Change the channel’s mode:
+				i: Set/remove Invite-only channel
+				t: Set/remove the restrictions of the TOPIC command to channel operator
+				k: Set/remove the channel key (password)
+				o: Give/take channel operator privilege
+				l: Set/remove the user limit to channel */
+}
+
+void Server::registerClient(int fd)
+{
+	if (!_clients[fd].getNick().empty() && !_clients[fd].getUser().empty())
+	{
+		std::string msg = ":ircserv 001 " + _clients[fd].getNick() + 
+             " :Welcome to the Internet Relay Network " + _clients[fd].getNick() + "!" + _clients[fd].getUser() + "@localhost\r\n";
+		send(fd, msg.c_str(), msg.length(), 0);
+
+		msg = ":ircserv 002 " + _clients[fd].getNick() +
+					" :Your host is ircserv, running version 1.0\r\n";
+		send(fd, msg.c_str(), msg.length(), 0);
+
+		msg = ":ircserv 003 " + _clients[fd].getNick() +
+					" :This server was created 4/24/25\r\n";
+		send(fd, msg.c_str(), msg.length(), 0);
+
+		msg = ":ircserv 004 " + _clients[fd].getNick() + " ircserv 1.0 o mt\r\n";
+		send(fd, msg.c_str(), msg.length(), 0);
+
+		_clients[fd].isRegistered = true;
+	}
+}

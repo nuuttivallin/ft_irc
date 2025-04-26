@@ -1,0 +1,52 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   Server.hpp                                         :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: nvallin <nvallin@student.hive.fi>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2025/04/19 20:18:03 by nvallin           #+#    #+#             */
+/*   Updated: 2025/04/19 20:51:02 by nvallin          ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#pragma once
+#include <iostream>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <poll.h>
+#include <vector>
+#include <unistd.h>
+#include "Client.hpp"
+#include <fcntl.h>
+#include <arpa/inet.h>
+#include <signal.h>
+#include <sstream>
+#include <map>
+
+class Client;
+
+class Server
+{
+	public:
+		Server(std::string port);
+		void startServer();
+		void acceptNewClient();
+	private:
+		int _port;
+		int _fd;
+		std::map<int, Client> _clients;
+		//std::map<std::string, Channel> channels
+		std::vector<struct pollfd> _pfds;
+		int checkPort(std::string input);
+		struct IRCmessage
+		{
+			std::string prefix;
+			std::string cmd;
+			std::vector<std::string> args;
+		};
+		IRCmessage parse(const std::string msg);
+		void handleCommand(IRCmessage msg, int fd);
+		void registerClient(int fd);
+		std::vector<std::string> splitLines(const std::string msg);
+};

@@ -1,0 +1,37 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   Client.hpp                                         :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: nvallin <nvallin@student.hive.fi>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2025/04/19 20:18:36 by nvallin           #+#    #+#             */
+/*   Updated: 2025/04/19 20:33:40 by nvallin          ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#pragma once
+#include <iostream>
+
+class Client
+{
+	public:
+		Client();
+		int getFd();
+		void setFd(int fd);
+		void setIpAdd(std::string ipadd);
+		std::string getNick();
+		void setNick(std::string nick);
+		std::string getUser();
+		void setUser(std::string user);
+		std::string getReal();
+		void setReal(std::string real);
+		bool isRegistered;
+	private:
+		int _fd;
+		std::string _ipAdd;
+		std::string _nickname;
+		std::string _username;
+		std::string _realname;
+};
+		
