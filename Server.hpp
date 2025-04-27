@@ -32,11 +32,12 @@ class Channel;
 class Server
 {
 	public:
-		Server(std::string port);
+		Server(std::string port, std::string pass);
 		void startServer();
 	private:
 		int _port;
 		int _fd;
+		std::string _pass;
 		std::map<int, Client> _clients;
 		std::map<std::string, Channel> _channels;
 		std::vector<struct pollfd> _pfds;
@@ -53,4 +54,5 @@ class Server
 		void registerClient(int fd);
 		std::vector<std::string> splitLines(const std::string msg);
 		void polloutMessage(std::string msg, int fd);
+		void disconnectClient(int fd);
 };

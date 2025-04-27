@@ -12,11 +12,12 @@
 
 #include "Server.hpp"
 
-Server::Server(std::string port)
+Server::Server(std::string port, std::string pass)
 {
 	_fd = -1;
 	if (checkPort(port) == -1)
 		throw (std::runtime_error("invalid port"));
+	_pass = pass;
 }
 
 void Server::acceptNewClient()
@@ -37,6 +38,8 @@ void Server::acceptNewClient()
 		std::cout << "couldn't set client to O_NONBLOCK\n";
 		return ;
 	}
+	if (_pass.empty())
+		newClient.correctPassword = true;
 
 	new_pfd.fd = newClient.getFd();
 	new_pfd.events = POLLIN;
@@ -99,10 +102,7 @@ void Server::startServer()
 					char buffer[1024] = { 0 };
 					if (recv(_pfds[i].fd, buffer, sizeof(buffer), 0) <= 0)
 					{
-						std::cout << "Client " << _pfds[i].fd << " disconnected\n";
-						_clients.erase(_pfds[i].fd);					
-						close(_pfds[i].fd);
-						_pfds.erase(_pfds.begin() + i);
+						disconnectClient(_pfds[i].fd);
 						i--;
 					}
 					else
@@ -126,7 +126,11 @@ void Server::startServer()
 			{
 				_clients[_pfds[i].fd].sendData();
 				if (!_clients[_pfds[i].fd].hasDataToSend())
+				{
 					_pfds[i].revents &= ~POLLOUT;
+					if (_clients[_pfds[i].fd].waitingToDisconnect)
+						disconnectClient(_pfds[i].fd);
+				}
 			}
 		}
 	}
@@ -197,7 +201,7 @@ Server::IRCmessage Server::parse(const std::string input)
 
 void Server::handleCommand(IRCmessage msg, int fd)
 {
-	if (!_clients[fd].isRegistered)
+	if (!_clients[fd].isRegistered && !_clients[fd].waitingToDisconnect)
 	{
 		if (msg.cmd == "CAP" && !msg.args.empty())
 		{
@@ -210,23 +214,81 @@ void Server::handleCommand(IRCmessage msg, int fd)
 				_clients[fd].negotiating = false;
 		}
 		if (msg.cmd == "NICK")
-			_clients[fd].setNick(msg.args[0]);
+		{
+			if (!_clients[fd].correctPassword)
+			{
+				polloutMessage(":ircserv 464 * :Password incorrect\r\n", fd);
+				_clients[fd].waitingToDisconnect = true;
+			}
+			else if (msg.args.size() < 1)
+				polloutMessage(":ircserv 431 * :No nickname given\r\n", fd);
+			else if (msg.args[0][0] == '#' || msg.args[0][0] == ':' || \
+			(msg.args[0][0] == '&' && msg.args[0][0] == '#') || msg.args.size() > 1)
+				polloutMessage(":ircserv 432 " + msg.args[0] + " :Erroneus nickname\r\n", fd);
+			else
+			{
+				std::map<int, Client>::iterator it = _clients.begin();
+				while (it != _clients.end())
+				{
+					if (it->second.getNick() == msg.args[0])
+						break;
+					it++;
+				}
+				if (it != _clients.end())
+					polloutMessage(":ircserv 433 " + msg.args[0] + " :Nickname is already in use\r\n", fd);
+				else
+					_clients[fd].setNick(msg.args[0]);
+			}
+		}
 		if (msg.cmd == "USER")
-			_clients[fd].setUser(msg.args[0]);
+		{
+			if (!_clients[fd].correctPassword)
+			{
+				polloutMessage(":ircserv 464 * :Password incorrect\r\n", fd);
+				_clients[fd].waitingToDisconnect = true;
+			}
+			else if (msg.args.size() < 1)
+				polloutMessage(":ircserv 461 * " + msg.cmd + " :Not enough parameters\r\n", fd);
+			else
+			{
+				_clients[fd].setUser(msg.args[0]);
+				_clients[fd].setReal(msg.args.back());
+			}
+		}
+		if (msg.cmd == "PASS")
+		{
+			if (msg.args.size() == 1 && msg.args[0] == _pass)
+				_clients[fd].correctPassword = true;
+			else
+			{
+				if (msg.args.size() < 1)
+					polloutMessage(":ircserv 461 * " + msg.cmd + " :Not enough parameters\r\n", fd);
+				else if (msg.args[0] != _pass)
+					polloutMessage(":ircserv 464 * :Password incorrect\r\n", fd);
+				_clients[fd].waitingToDisconnect = true;
+			}
+		}
 		registerClient(fd);
 	}
-	else
+	else if (!_clients[fd].waitingToDisconnect)
 	{
 		if (msg.cmd == "NICK")
 		{
+			// actually only send to all in the same channel, not ALL clients!
 			for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); it++)
 				polloutMessage(":" + _clients[fd].getNick() + " NICK :" + msg.args[0] + "\r\n", it->first);
 
 			_clients[fd].setNick(msg.args[0]);
 		}
-		if (msg.cmd == "USER")
-			_clients[fd].setUser(msg.args[0]);
-
+		if (msg.cmd == "USER" || msg.cmd == "PASS")
+			polloutMessage(":ircserv 462 " + _clients[fd].getNick() + " :You may not register\r\n", fd);
+		if (msg.cmd == "PING")
+		{
+			if (msg.args.size() < 1)
+				polloutMessage(":ircserv 461 * " + msg.cmd + " :Not enough parameters\r\n", fd);
+			else
+				polloutMessage(":ircserv " + msg.args[0], fd);
+		}
 
 		// JOIN to join channels
 		// join(name)
@@ -260,7 +322,8 @@ void Server::handleCommand(IRCmessage msg, int fd)
 
 void Server::registerClient(int fd)
 {
-	if (!_clients[fd].getNick().empty() && !_clients[fd].getUser().empty() && _clients[fd].negotiating == false)
+	if (!_clients[fd].getNick().empty() && !_clients[fd].getUser().empty() && \
+		_clients[fd].negotiating == false && _clients[fd].correctPassword)
 	{
 		polloutMessage(":ircserv 001 " + _clients[fd].getNick() + 
              " :Welcome to the Internet Relay Network " + _clients[fd].getNick() + "!" + _clients[fd].getUser() + "@localhost\r\n", fd);
@@ -275,6 +338,17 @@ void Server::registerClient(int fd)
 
 		_clients[fd].isRegistered = true;
 	}
+}
+
+void Server::disconnectClient(int fd)
+{
+	std::vector<pollfd>::iterator it = _pfds.begin();
+	while (it != _pfds.end() && it->fd != fd)
+		it++;
+	std::cout << "Client " << fd << " disconnected\n";
+	_clients.erase(fd);					
+	close(fd);
+	_pfds.erase(it);
 }
 
 void Server::polloutMessage(std::string msg, int fd)

@@ -16,6 +16,8 @@ Client::Client()
 {
 	isRegistered = false;
 	negotiating = false;
+	correctPassword = false;
+	waitingToDisconnect = false;
 }
 
 int Client::getFd()
@@ -76,23 +78,20 @@ bool Client::hasDataToSend()
 void Client::sendData()
 {
 	std::string msg;
-	while (!_sendQueue.empty() || !_partialSend.empty())
+	if (hasDataToSend())
 	{
 		if (_partialSend.empty())
+		{
 			msg = _sendQueue.front();
+			_sendQueue.pop();
+		}
 		else
 			msg = _partialSend;
 		size_t bytesSent = send(_fd, msg.c_str(), msg.size(), 0);
+		//add check for -1 return
 		if (bytesSent < msg.size())
-		{
 			_partialSend = msg.substr(bytesSent);
-			break;
-		}
 		else
-		{
 			_partialSend.clear();
-			if (!_sendQueue.empty())
-				_sendQueue.pop();
-		}
 	}
 }

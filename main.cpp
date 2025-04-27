@@ -24,16 +24,21 @@ void signalhandler(int sig)
 
 int main(int argc, char** argv)
 {
-	if (argc < 2)
+	if (argc != 3)
 	{
-		std::cout << "run ircserv with a port number (and a password)\n";
+		std::cout << "run ircserv with a port number and a password\n";
+		return (1);
+	}
+	else if (!argv[2][0])
+	{
+		std::cout << "password can't be empty!\n";
 		return (1);
 	}
 	try
 	{
 		signal(SIGINT, signalhandler);
 		signal(SIGQUIT, signalhandler);
-		Server ircserv(argv[1]);
+		Server ircserv(argv[1], argv[2]);
 		ircserv.startServer();
 	}
 	catch (std::exception &e)

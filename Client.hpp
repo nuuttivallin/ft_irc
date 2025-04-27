@@ -30,6 +30,8 @@ class Client
 		void setReal(std::string real);
 		bool isRegistered;
 		bool negotiating;
+		bool correctPassword;
+		bool waitingToDisconnect;
 		void queueMessage(const std::string msg);
 		void sendData();
 		bool hasDataToSend();
