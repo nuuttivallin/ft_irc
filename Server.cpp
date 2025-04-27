@@ -103,6 +103,7 @@ void Server::startServer()
 						_clients.erase(_pfds[i].fd);					
 						close(_pfds[i].fd);
 						_pfds.erase(_pfds.begin() + i);
+						i--;
 					}
 					else
 					{
@@ -112,15 +113,20 @@ void Server::startServer()
 							IRCmessage msg = parse(*it);
 							handleCommand(msg, _pfds[i].fd);
 
-							// printing message and echoing it back just for debugging atm					
+							// printing message just for debugging atm					
 							std::cout << "prefix: " << msg.prefix << " cmd: " << msg.cmd << std::endl;
 							for (std::vector<std::string>::iterator it = msg.args.begin(); it < msg.args.end(); it++)
 								std::cout << "arg: " << *it << "\n";
 							std::cout << "\n";				
 						}
-						send(_pfds[i].fd, buffer, sizeof(buffer), 0);
 					}
 				}
+			}
+			if (_pfds[i].revents & POLLOUT)
+			{
+				_clients[_pfds[i].fd].sendData();
+				if (!_clients[_pfds[i].fd].hasDataToSend())
+					_pfds[i].revents &= ~POLLOUT;
 			}
 		}
 	}
@@ -157,6 +163,8 @@ std::vector<std::string> Server::splitLines(const std::string msg)
         lines.push_back(msg.substr(start, end - start));
         start = end + 2;
     }
+	if (lines.empty())
+		lines.push_back(msg);
     return (lines);
 }
 
@@ -191,52 +199,93 @@ void Server::handleCommand(IRCmessage msg, int fd)
 {
 	if (!_clients[fd].isRegistered)
 	{
+		if (msg.cmd == "CAP" && !msg.args.empty())
+		{
+			_clients[fd].negotiating = true;
+			if (msg.args[0] == "LS")
+				polloutMessage("CAP * LS :\r\n", fd);
+			else if (msg.args[0] == "REQ" && msg.args.size() >= 2)
+				polloutMessage("CAP * NAK " + msg.args[1] + "\r\n", fd);
+			else if (msg.args[0] == "END")
+				_clients[fd].negotiating = false;
+		}
 		if (msg.cmd == "NICK")
 			_clients[fd].setNick(msg.args[0]);
 		if (msg.cmd == "USER")
 			_clients[fd].setUser(msg.args[0]);
 		registerClient(fd);
 	}
-	if (msg.cmd == "NICK")
-		_clients[fd].setNick(msg.args[0]);
-	if (msg.cmd == "USER")
-		_clients[fd].setUser(msg.args[0]);
-	// JOIN to join channels
-		//if no channel, create a channel
-	// PRIVMSG for messaging
+	else
+	{
+		if (msg.cmd == "NICK")
+		{
+			for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); it++)
+				polloutMessage(":" + _clients[fd].getNick() + " NICK :" + msg.args[0] + "\r\n", it->first);
 
-// somehow check is client operator of the channel??
-	/* for operators:
-			KICK - Eject a client from the channel
-			INVITE - Invite a client to a channel
-			TOPIC - Change or view the channel topic
-			MODE - Change the channel’s mode:
-				i: Set/remove Invite-only channel
-				t: Set/remove the restrictions of the TOPIC command to channel operator
-				k: Set/remove the channel key (password)
-				o: Give/take channel operator privilege
-				l: Set/remove the user limit to channel */
+			_clients[fd].setNick(msg.args[0]);
+		}
+		if (msg.cmd == "USER")
+			_clients[fd].setUser(msg.args[0]);
+
+
+		// JOIN to join channels
+		// join(name)
+		// if (name in channel)
+		// 	_channels[name].push_back(_clients[fd]);
+		// 	std::cout << "guys in the channel now\n";
+		// else
+		// 	Channel ch;
+		// 	ch._clients.push_back(_clients[fd]);
+		// 	ch._operators.push_back(fd);
+		// 	std::pair<std::string, Channel> newChannel;
+		// 	newChannel.first = "channel_name";
+		// 	newChannel.second = ch;
+		// 	_channels.insert(newChannel);
+			
+		// PRIVMSG for messaging
+
+	// somehow check is client operator of the channel??
+		/* for operators:
+				KICK - Eject a client from the channel
+				INVITE - Invite a client to a channel
+				TOPIC - Change or view the channel topic
+				MODE - Change the channel’s mode:
+					i: Set/remove Invite-only channel
+					t: Set/remove the restrictions of the TOPIC command to channel operator
+					k: Set/remove the channel key (password)
+					o: Give/take channel operator privilege
+					l: Set/remove the user limit to channel */
+	}
 }
 
 void Server::registerClient(int fd)
 {
-	if (!_clients[fd].getNick().empty() && !_clients[fd].getUser().empty())
+	if (!_clients[fd].getNick().empty() && !_clients[fd].getUser().empty() && _clients[fd].negotiating == false)
 	{
-		std::string msg = ":ircserv 001 " + _clients[fd].getNick() + 
-             " :Welcome to the Internet Relay Network " + _clients[fd].getNick() + "!" + _clients[fd].getUser() + "@localhost\r\n";
-		send(fd, msg.c_str(), msg.length(), 0);
+		polloutMessage(":ircserv 001 " + _clients[fd].getNick() + 
+             " :Welcome to the Internet Relay Network " + _clients[fd].getNick() + "!" + _clients[fd].getUser() + "@localhost\r\n", fd);
 
-		msg = ":ircserv 002 " + _clients[fd].getNick() +
-					" :Your host is ircserv, running version 1.0\r\n";
-		send(fd, msg.c_str(), msg.length(), 0);
+		polloutMessage(":ircserv 002 " + _clients[fd].getNick() +
+					" :Your host is ircserv, running version 1.0\r\n", fd);
 
-		msg = ":ircserv 003 " + _clients[fd].getNick() +
-					" :This server was created 4/24/25\r\n";
-		send(fd, msg.c_str(), msg.length(), 0);
+		polloutMessage(":ircserv 003 " + _clients[fd].getNick() +
+					" :This server was created 4/24/25\r\n", fd);
 
-		msg = ":ircserv 004 " + _clients[fd].getNick() + " ircserv 1.0 o mt\r\n";
-		send(fd, msg.c_str(), msg.length(), 0);
+		polloutMessage( ":ircserv 004 " + _clients[fd].getNick() + " ircserv 1.0 o mt\r\n", fd);
 
 		_clients[fd].isRegistered = true;
+	}
+}
+
+void Server::polloutMessage(std::string msg, int fd)
+{
+	_clients[fd].queueMessage(msg);
+	for (size_t i = 0; i < _pfds.size(); i++)
+	{
+		if (_pfds[i].fd == fd)
+		{
+			_pfds[i].events |= POLLOUT;
+			break;
+		}
 	}
 }

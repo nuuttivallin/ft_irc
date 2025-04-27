@@ -23,20 +23,22 @@
 #include <signal.h>
 #include <sstream>
 #include <map>
+#include "Channel.hpp"
+#include <bits/stdc++.h>
 
 class Client;
+class Channel;
 
 class Server
 {
 	public:
 		Server(std::string port);
 		void startServer();
-		void acceptNewClient();
 	private:
 		int _port;
 		int _fd;
 		std::map<int, Client> _clients;
-		//std::map<std::string, Channel> channels
+		std::map<std::string, Channel> _channels;
 		std::vector<struct pollfd> _pfds;
 		int checkPort(std::string input);
 		struct IRCmessage
@@ -47,6 +49,8 @@ class Server
 		};
 		IRCmessage parse(const std::string msg);
 		void handleCommand(IRCmessage msg, int fd);
+		void acceptNewClient();		
 		void registerClient(int fd);
 		std::vector<std::string> splitLines(const std::string msg);
+		void polloutMessage(std::string msg, int fd);
 };
