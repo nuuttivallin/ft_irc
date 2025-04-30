@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Server.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: nvallin <nvallin@student.hive.fi>          +#+  +:+       +#+        */
+/*   By: pbumidan <pbumidan@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/19 20:18:18 by nvallin           #+#    #+#             */
-/*   Updated: 2025/04/19 20:18:27 by nvallin          ###   ########.fr       */
+/*   Updated: 2025/04/30 16:45:49 by pbumidan         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -289,20 +289,95 @@ void Server::handleCommand(IRCmessage msg, int fd)
 			else
 				polloutMessage(":ircserv " + msg.args[0], fd);
 		}
-
-		// JOIN to join channels
-		// join(name)
-		// if (name in channel)
-		// 	_channels[name].push_back(_clients[fd]);
-		// 	std::cout << "guys in the channel now\n";
-		// else
-		// 	Channel ch;
-		// 	ch._clients.push_back(_clients[fd]);
-		// 	ch._operators.push_back(fd);
-		// 	std::pair<std::string, Channel> newChannel;
-		// 	newChannel.first = "channel_name";
-		// 	newChannel.second = ch;
-		// 	_channels.insert(newChannel);
+		if (msg.cmd == "JOIN")
+		{
+			if (msg.args.empty())
+			{
+				polloutMessage(":ircserv 461 * " + msg.cmd + " :Not enough parameters\r\n", fd);
+				return;
+			}
+			else if (msg.args[0][0] != '#' && msg.args[0][0] != '&')
+			{
+				polloutMessage(":ircserv 403 " + _clients[fd].getNick() + " " + msg.args[0] + " :No such channel\r\n", fd);
+				return;
+			}
+			else
+			{
+				//MISSING:: TODO
+				// Parse the args if multiple channels are given and if there are keys
+				//create a secondary parser
+				std::string channelName = msg.args[0];
+				std::map<std::string, Channel>::iterator it = _channels.find(channelName);
+				Channel *ch = NULL;
+				if (it == _channels.end()) // channel doesnt exist
+				{
+					Channel NewChannel;
+					NewChannel._clients.push_back(_clients[fd]);
+					NewChannel._operators.push_back(fd); // first user is an operator
+					std::pair<std::string, Channel> channelpair;
+					channelpair.first = msg.args[0];
+					channelpair.second = NewChannel;
+					_channels.insert(channelpair);
+					ch = &(_channels[channelName]);
+				}
+				else
+				{
+					ch = &(it->second); // channel already exists
+					// Check if user already joined
+					for(size_t i = 0; i < ch->_clients.size(); i++)
+					{
+						if (ch->_clients[i].getFd() == fd)
+						{
+							polloutMessage(":ircserv 443 " + _clients[fd].getNick() + " " + channelName + " :is already on channel\r\n", fd);
+							return ;
+						}
+					}
+					//MISSING:: TODO
+					// Check if user limit is reached
+					// check if channel is invite only
+					// and other MODES
+					ch->_clients.push_back(_clients[fd]); //add client to channel client list
+				}
+				// send JOIN to all clients in the channel
+				for (size_t i = 0; i < ch->_clients.size(); i++)
+				{
+					std::string joinMsg = ":" + _clients[fd].getNick() + "!" + _clients[fd].getUser() + "@ircserv JOIN :" + channelName + "\r\n";
+					polloutMessage(joinMsg, ch->_clients[i].getFd());
+					if (ch->_clients[i].getFd() == fd)
+					{
+						// RPL_NAMREPLY(353) + RPL_ENDOFNAMES(366)
+						std::string names = "";
+						for (size_t i = 0; i < ch->_clients.size(); i++)
+						{
+							if (std::find(ch->_operators.begin(), ch->_operators.end(), ch->_clients[i].getFd()) != ch->_operators.end())
+								names += "@"; //operators should have an @
+							names += ch->_clients[i].getNick() + " ";
+						}
+						polloutMessage(":ircserv 353 " + _clients[fd].getNick() + " = " + channelName + " :" + names + "\r\n", fd);
+						polloutMessage(":ircserv 366 " + _clients[fd].getNick() + " " + channelName + " :End of NAMES list\r\n", fd);
+					}
+				}
+				//chatgpt version:
+				// // Construct JOIN message
+				// std::string prefix = ":" + _clients[fd].getNick() + "!" + _clients[fd].getUser() + "@ircserv ";
+				// std::string joinMsg = prefix + "JOIN :" + channelName + "\r\n";
+				// // Send JOIN message to all clients in the channel
+				// for (const Client& client : channel.clients)
+				// {
+				// 	polloutMessage(joinMsg, client.getFd());
+				// }
+				// // Send RPL_NAMREPLY and RPL_ENDOFNAMES only to the joining client
+				// std::string nameList;
+				// for (const Client& client : channel->_clients)
+				// {
+				// 	if (std::find(channel->_operators.begin(), channel->_operators.end(), client.getFd()) != channel->_operators.end())
+				// 		nameList += "@";
+				// 	nameList += client.getNick() + " ";
+				// }
+				// polloutMessage(":ircserv 366 " + _clients[fd].getNick() + " " + channelName + " :End of NAMES list\r\n", fd);
+				// polloutMessage(":ircserv 353 " + _clients[fd].getNick() + " = " + channelName + " :" + nameList + "\r\n", fd);
+			}
+		}
 			
 		// PRIVMSG for messaging
 
