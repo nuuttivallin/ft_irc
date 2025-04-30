@@ -6,7 +6,7 @@
 /*   By: pbumidan <pbumidan@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/19 20:18:18 by nvallin           #+#    #+#             */
-/*   Updated: 2025/04/30 16:45:49 by pbumidan         ###   ########.fr       */
+/*   Updated: 2025/04/30 20:57:49 by pbumidan         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -199,6 +199,119 @@ Server::IRCmessage Server::parse(const std::string input)
 	return (msg);
 }
 
+std::vector<std::string> splitJoinlist(const std::string &list)
+{
+	std::vector<std::string> lines;
+
+	if (list.empty())
+		return lines;
+
+	size_t start = 0;
+	while (start < list.size())
+	{
+		size_t end = list.find(',', start);
+
+		// Prevent empty strings from being added (e.g. ",,")
+		if (end != std::string::npos)
+		{
+			if (end > start)
+				lines.push_back(list.substr(start, end - start));
+			start = end + 1;
+		}
+		else
+		{
+			// Last segment
+			if (start < list.size())
+				lines.push_back(list.substr(start));
+			break;
+		}
+	}
+
+	return lines;
+}
+
+Server::JOINmessage Server::parseJoin(const std::string input)
+{
+	JOINmessage msg;
+	std::string chlist;
+	std::string keylist;
+
+	size_t space_pos = input.find(' ');
+	if (space_pos != std::string::npos)
+	{
+		chlist = input.substr(0, space_pos);
+		if (space_pos + 1 < input.length())
+			keylist = input.substr(space_pos + 1);
+	}
+	else
+	{
+		chlist = input; // No keys provided
+	}
+	if (!chlist.empty())
+		msg.channel = splitJoinlist(chlist);
+	if (!keylist.empty())
+		msg.key = splitJoinlist(keylist);
+
+	return msg;
+}
+
+// void Server::sendJoinResponses(Channel* ch, int fd, const std::string& channelName)
+// {
+// 	for (size_t i = 0; i < ch->_clients.size(); i++)
+// 	{
+// 		std::string joinMsg = ":" + ch->_clients[fd].getNick() + "!" + ch->_clients[fd].getUser() + "@ircserv JOIN :" + channelName + "\r\n";
+// 		polloutMessage(joinMsg, ch->_clients[i].getFd());
+// 		if (ch->_clients[i].getFd() == fd)
+// 		{
+// 			//send RPL_NAMREPLY(353) + RPL_ENDOFNAMES(366) to the joining client
+// 			std::string names = "";
+// 			for (size_t j = 0; j < ch->_clients.size(); j++)
+// 			{
+// 				if (std::find(ch->_operators.begin(), ch->_operators.end(), ch->_clients[j].getFd()) != ch->_operators.end())
+// 					names += "@"; //operators should have an @
+// 				names += ch->_clients[j].getNick() + " ";
+// 			}
+// 			polloutMessage(":ircserv 353 " + ch->_clients[fd].getNick() + " = " + channelName + " :" + names + "\r\n", fd);
+// 			polloutMessage(":ircserv 366 " + ch->_clients[fd].getNick() + " " + channelName + " :End of NAMES list\r\n", fd);
+// 		}
+// 	}
+// }
+
+void Server::sendJoinResponses(Channel* ch, int fd, const std::string& channelName)
+{
+    Client* joiningClient = NULL;
+    for (size_t k = 0; k < ch->_clients.size(); ++k) {
+        if (ch->_clients[k].getFd() == fd) {
+            joiningClient = &ch->_clients[k];
+            break;
+        }
+    }
+    if (!joiningClient)
+        return; // Client not found, avoid crash
+
+    for (size_t i = 0; i < ch->_clients.size(); i++)
+    {
+        std::string joinMsg = ":" + joiningClient->getNick() + "!" + joiningClient->getUser() + "@ircserv JOIN :" + channelName + "\r\n";
+        polloutMessage(joinMsg, ch->_clients[i].getFd());
+
+        if (ch->_clients[i].getFd() == fd)
+        {
+            // Send 353 and 366 replies
+            std::string names;
+            for (size_t j = 0; j < ch->_clients.size(); j++)
+            {
+                if (std::find(ch->_operators.begin(), ch->_operators.end(), ch->_clients[j].getFd()) != ch->_operators.end())
+                    names += "@"; // operator
+                names += ch->_clients[j].getNick() + " ";
+            }
+            polloutMessage(":ircserv 353 " + joiningClient->getNick() + " = " + channelName + " :" + names + "\r\n", fd);
+            polloutMessage(":ircserv 366 " + joiningClient->getNick() + " " + channelName + " :End of NAMES list\r\n", fd);
+        }
+    }
+}
+
+
+
 void Server::handleCommand(IRCmessage msg, int fd)
 {
 	if (!_clients[fd].isRegistered && !_clients[fd].waitingToDisconnect)
@@ -207,11 +320,11 @@ void Server::handleCommand(IRCmessage msg, int fd)
 		{
 			_clients[fd].negotiating = true;
 			if (msg.args[0] == "LS")
-				polloutMessage("CAP * LS :\r\n", fd);
+			polloutMessage("CAP * LS :\r\n", fd);
 			else if (msg.args[0] == "REQ" && msg.args.size() >= 2)
-				polloutMessage("CAP * NAK " + msg.args[1] + "\r\n", fd);
+			polloutMessage("CAP * NAK " + msg.args[1] + "\r\n", fd);
 			else if (msg.args[0] == "END")
-				_clients[fd].negotiating = false;
+			_clients[fd].negotiating = false;
 		}
 		if (msg.cmd == "NICK")
 		{
@@ -221,21 +334,21 @@ void Server::handleCommand(IRCmessage msg, int fd)
 				_clients[fd].waitingToDisconnect = true;
 			}
 			else if (msg.args.size() < 1)
-				polloutMessage(":ircserv 431 * :No nickname given\r\n", fd);
+			polloutMessage(":ircserv 431 * :No nickname given\r\n", fd);
 			else if (msg.args[0][0] == '#' || msg.args[0][0] == ':' || \
-			(msg.args[0][0] == '&' && msg.args[0][0] == '#') || msg.args.size() > 1)
+				(msg.args[0][0] == '&' && msg.args[0][0] == '#') || msg.args.size() > 1)
 				polloutMessage(":ircserv 432 " + msg.args[0] + " :Erroneus nickname\r\n", fd);
-			else
-			{
-				std::map<int, Client>::iterator it = _clients.begin();
-				while (it != _clients.end())
+				else
+				{
+					std::map<int, Client>::iterator it = _clients.begin();
+					while (it != _clients.end())
 				{
 					if (it->second.getNick() == msg.args[0])
-						break;
+					break;
 					it++;
 				}
 				if (it != _clients.end())
-					polloutMessage(":ircserv 433 " + msg.args[0] + " :Nickname is already in use\r\n", fd);
+				polloutMessage(":ircserv 433 " + msg.args[0] + " :Nickname is already in use\r\n", fd);
 				else
 					_clients[fd].setNick(msg.args[0]);
 			}
@@ -248,7 +361,7 @@ void Server::handleCommand(IRCmessage msg, int fd)
 				_clients[fd].waitingToDisconnect = true;
 			}
 			else if (msg.args.size() < 1)
-				polloutMessage(":ircserv 461 * " + msg.cmd + " :Not enough parameters\r\n", fd);
+			polloutMessage(":ircserv 461 * " + msg.cmd + " :Not enough parameters\r\n", fd);
 			else
 			{
 				_clients[fd].setUser(msg.args[0]);
@@ -258,13 +371,13 @@ void Server::handleCommand(IRCmessage msg, int fd)
 		if (msg.cmd == "PASS")
 		{
 			if (msg.args.size() == 1 && msg.args[0] == _pass)
-				_clients[fd].correctPassword = true;
+			_clients[fd].correctPassword = true;
 			else
 			{
 				if (msg.args.size() < 1)
-					polloutMessage(":ircserv 461 * " + msg.cmd + " :Not enough parameters\r\n", fd);
+				polloutMessage(":ircserv 461 * " + msg.cmd + " :Not enough parameters\r\n", fd);
 				else if (msg.args[0] != _pass)
-					polloutMessage(":ircserv 464 * :Password incorrect\r\n", fd);
+				polloutMessage(":ircserv 464 * :Password incorrect\r\n", fd);
 				_clients[fd].waitingToDisconnect = true;
 			}
 		}
@@ -276,87 +389,83 @@ void Server::handleCommand(IRCmessage msg, int fd)
 		{
 			// actually only send to all in the same channel, not ALL clients!
 			for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); it++)
-				polloutMessage(":" + _clients[fd].getNick() + " NICK :" + msg.args[0] + "\r\n", it->first);
-
+			polloutMessage(":" + _clients[fd].getNick() + " NICK :" + msg.args[0] + "\r\n", it->first);
+			
 			_clients[fd].setNick(msg.args[0]);
 		}
 		if (msg.cmd == "USER" || msg.cmd == "PASS")
-			polloutMessage(":ircserv 462 " + _clients[fd].getNick() + " :You may not register\r\n", fd);
+		polloutMessage(":ircserv 462 " + _clients[fd].getNick() + " :You may not register\r\n", fd);
 		if (msg.cmd == "PING")
 		{
 			if (msg.args.size() < 1)
-				polloutMessage(":ircserv 461 * " + msg.cmd + " :Not enough parameters\r\n", fd);
+			polloutMessage(":ircserv 461 * " + msg.cmd + " :Not enough parameters\r\n", fd);
 			else
-				polloutMessage(":ircserv " + msg.args[0], fd);
+			polloutMessage(":ircserv " + msg.args[0], fd);
 		}
 		if (msg.cmd == "JOIN")
 		{
 			if (msg.args.empty())
 			{
 				polloutMessage(":ircserv 461 * " + msg.cmd + " :Not enough parameters\r\n", fd);
-				return;
-			}
-			else if (msg.args[0][0] != '#' && msg.args[0][0] != '&')
-			{
-				polloutMessage(":ircserv 403 " + _clients[fd].getNick() + " " + msg.args[0] + " :No such channel\r\n", fd);
-				return;
 			}
 			else
 			{
-				//MISSING:: TODO
-				// Parse the args if multiple channels are given and if there are keys
-				//create a secondary parser
-				std::string channelName = msg.args[0];
-				std::map<std::string, Channel>::iterator it = _channels.find(channelName);
-				Channel *ch = NULL;
-				if (it == _channels.end()) // channel doesnt exist
+				JOINmessage joinmsg = parseJoin(msg.args[0]);
+				std::cout << "CHECK: joinmsg.channel.size(): " << joinmsg.channel.size() << std::endl;
+				for (size_t i = 0; i < joinmsg.channel.size(); ++i)
 				{
-					Channel NewChannel;
-					NewChannel._clients.push_back(_clients[fd]);
-					NewChannel._operators.push_back(fd); // first user is an operator
-					std::pair<std::string, Channel> channelpair;
-					channelpair.first = msg.args[0];
-					channelpair.second = NewChannel;
-					_channels.insert(channelpair);
-					ch = &(_channels[channelName]);
-				}
-				else
-				{
-					ch = &(it->second); // channel already exists
-					// Check if user already joined
-					for(size_t i = 0; i < ch->_clients.size(); i++)
+					std::cout << "CHECK: joinmsg.channel[i]: " << joinmsg.channel[i] << std::endl;
+					if (joinmsg.channel[i][0] != '#' && joinmsg.channel[i][0] != '&')
 					{
-						if (ch->_clients[i].getFd() == fd)
+						polloutMessage(":ircserv 403 " + _clients[fd].getNick() + " " + joinmsg.channel[i] + " :No such channel\r\n", fd);
+						continue;
+					}
+					else
+					{
+						std::string channelName = joinmsg.channel[i];
+						std::map<std::string, Channel>::iterator it = _channels.find(channelName);
+						Channel *ch = NULL;
+						if (it == _channels.end()) // channel doesnt exist
 						{
-							polloutMessage(":ircserv 443 " + _clients[fd].getNick() + " " + channelName + " :is already on channel\r\n", fd);
-							return ;
+							Channel	&newChannel = _channels[channelName];  // create channel and inserted in place
+							newChannel._clients.push_back(_clients[fd]);
+							newChannel._operators.push_back(fd);
+							ch = &newChannel;
+							sendJoinResponses(ch, fd, channelName);
+						}
+						else
+						{
+							ch = &(it->second); // channel already exists
+							bool alreadyJoined = false;// Check if user already joined
+							for(size_t i = 0; i < ch->_clients.size(); i++)
+							{
+								if (ch->_clients[i].getFd() == fd)
+								{
+									polloutMessage(":ircserv 443 " + _clients[fd].getNick() + " " + channelName + " :is already on channel\r\n", fd);
+									alreadyJoined = true;
+									break;
+								}
+							}
+							if (alreadyJoined)
+								continue;
+							else
+							{
+								//MISSING:: TODO
+								// Check if user limit is reached
+								// check if channel is invite only
+								// and other MODES
+								ch->_clients.push_back(_clients[fd]); //add client to channel client list
+								// send (with RPL_TOPIC (332) and optionally RPL_TOPICWHOTIME (333)), and no message if the channel does not have a topic.
+								sendJoinResponses(ch, fd, channelName);
+							}
 						}
 					}
-					//MISSING:: TODO
-					// Check if user limit is reached
-					// check if channel is invite only
-					// and other MODES
-					ch->_clients.push_back(_clients[fd]); //add client to channel client list
 				}
-				// send JOIN to all clients in the channel
-				for (size_t i = 0; i < ch->_clients.size(); i++)
-				{
-					std::string joinMsg = ":" + _clients[fd].getNick() + "!" + _clients[fd].getUser() + "@ircserv JOIN :" + channelName + "\r\n";
-					polloutMessage(joinMsg, ch->_clients[i].getFd());
-					if (ch->_clients[i].getFd() == fd)
-					{
-						// RPL_NAMREPLY(353) + RPL_ENDOFNAMES(366)
-						std::string names = "";
-						for (size_t i = 0; i < ch->_clients.size(); i++)
-						{
-							if (std::find(ch->_operators.begin(), ch->_operators.end(), ch->_clients[i].getFd()) != ch->_operators.end())
-								names += "@"; //operators should have an @
-							names += ch->_clients[i].getNick() + " ";
-						}
-						polloutMessage(":ircserv 353 " + _clients[fd].getNick() + " = " + channelName + " :" + names + "\r\n", fd);
-						polloutMessage(":ircserv 366 " + _clients[fd].getNick() + " " + channelName + " :End of NAMES list\r\n", fd);
-					}
-				}
+			}
+		}
+	}
+}
+
 				//chatgpt version:
 				// // Construct JOIN message
 				// std::string prefix = ":" + _clients[fd].getNick() + "!" + _clients[fd].getUser() + "@ircserv ";
@@ -376,41 +485,39 @@ void Server::handleCommand(IRCmessage msg, int fd)
 				// }
 				// polloutMessage(":ircserv 366 " + _clients[fd].getNick() + " " + channelName + " :End of NAMES list\r\n", fd);
 				// polloutMessage(":ircserv 353 " + _clients[fd].getNick() + " = " + channelName + " :" + nameList + "\r\n", fd);
-			}
-		}
 			
-		// PRIVMSG for messaging
+			// PRIVMSG for messaging
 
-	// somehow check is client operator of the channel??
+			// somehow check is client operator of the channel??
 		/* for operators:
-				KICK - Eject a client from the channel
+		KICK - Eject a client from the channel
 				INVITE - Invite a client to a channel
 				TOPIC - Change or view the channel topic
 				MODE - Change the channel’s mode:
-					i: Set/remove Invite-only channel
-					t: Set/remove the restrictions of the TOPIC command to channel operator
+				i: Set/remove Invite-only channel
+				t: Set/remove the restrictions of the TOPIC command to channel operator
 					k: Set/remove the channel key (password)
 					o: Give/take channel operator privilege
 					l: Set/remove the user limit to channel */
-	}
-}
+
+
 
 void Server::registerClient(int fd)
 {
 	if (!_clients[fd].getNick().empty() && !_clients[fd].getUser().empty() && \
-		_clients[fd].negotiating == false && _clients[fd].correctPassword)
+	_clients[fd].negotiating == false && _clients[fd].correctPassword)
 	{
 		polloutMessage(":ircserv 001 " + _clients[fd].getNick() + 
-             " :Welcome to the Internet Relay Network " + _clients[fd].getNick() + "!" + _clients[fd].getUser() + "@localhost\r\n", fd);
-
+		" :Welcome to the Internet Relay Network " + _clients[fd].getNick() + "!" + _clients[fd].getUser() + "@localhost\r\n", fd);
+		
 		polloutMessage(":ircserv 002 " + _clients[fd].getNick() +
-					" :Your host is ircserv, running version 1.0\r\n", fd);
-
+		" :Your host is ircserv, running version 1.0\r\n", fd);
+		
 		polloutMessage(":ircserv 003 " + _clients[fd].getNick() +
-					" :This server was created 4/24/25\r\n", fd);
-
+		" :This server was created 4/24/25\r\n", fd);
+		
 		polloutMessage( ":ircserv 004 " + _clients[fd].getNick() + " ircserv 1.0 o mt\r\n", fd);
-
+		
 		_clients[fd].isRegistered = true;
 	}
 }

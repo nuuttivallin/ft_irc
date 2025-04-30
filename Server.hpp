@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Server.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: nvallin <nvallin@student.hive.fi>          +#+  +:+       +#+        */
+/*   By: pbumidan <pbumidan@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/19 20:18:03 by nvallin           #+#    #+#             */
-/*   Updated: 2025/04/19 20:51:02 by nvallin          ###   ########.fr       */
+/*   Updated: 2025/04/30 19:28:49 by pbumidan         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -49,6 +49,13 @@ class Server
 			std::vector<std::string> args;
 		};
 		IRCmessage parse(const std::string msg);
+		struct JOINmessage
+		{
+			std::vector<std::string> channel;
+			std::vector<std::string> key;
+		};
+		JOINmessage parseJoin(const std::string input);
+		void sendJoinResponses(Channel* ch, int fd, const std::string& channelName);
 		void handleCommand(IRCmessage msg, int fd);
 		void acceptNewClient();		
 		void registerClient(int fd);
