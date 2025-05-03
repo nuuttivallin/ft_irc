@@ -6,7 +6,7 @@
 /*   By: pbumidan <pbumidan@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/19 20:18:18 by nvallin           #+#    #+#             */
-/*   Updated: 2025/05/03 15:24:10 by pbumidan         ###   ########.fr       */
+/*   Updated: 2025/05/03 18:35:22 by pbumidan         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -367,7 +367,13 @@ void Server::handleCommand(IRCmessage msg, int fd)
 		{
 			if (msg.args.empty())
 			{
-				polloutMessage(":ircserv 461 * " + msg.cmd + " :Not enough parameters\r\n", fd);
+				// EDIT:client leave all joined channels:
+				/*Note that this command also accepts the special argument of ("0", 0x30) 
+				instead of any of the usual parameters, 
+				which requests that the sending client leave all channels they are currently connected to. 
+				The server will process this command as though the client had sent a 
+				PART command for each channel they are a member of.*/
+				polloutMessage(":ircserv 461 * " + msg.cmd + " :Not enough parameters\r\n", fd); //i use this for now
 				return;
 			}
 			else if (msg.args.size() > 2)
@@ -378,7 +384,7 @@ void Server::handleCommand(IRCmessage msg, int fd)
 			else
 			{
 				JOINmessage joinmsg;
-				std::cout << "CHECK: joinmsg.channel.size(): " << joinmsg.channel.size() << std::endl; //printcheck
+				std::cout << "CHECK: joinmsg.channel.size(): " << joinmsg.channel.size() << std::endl; //printcheck delete later
 				if (msg.args.size() == 1)
 					joinmsg = parseJoin(msg.args[0],"");
 				else
@@ -387,7 +393,7 @@ void Server::handleCommand(IRCmessage msg, int fd)
 				}
 				for (size_t i = 0; i < joinmsg.channel.size(); ++i)
 				{
-					std::cout << "CHECK: channel: " << joinmsg.channel[i] << std::endl; //printcheck
+					std::cout << "CHECK: channel: " << joinmsg.channel[i] << std::endl; //printcheck delete later
 					if (joinmsg.channel[i][0] != '#' && joinmsg.channel[i][0] != '&')
 					{
 						polloutMessage(":ircserv 403 " + _clients[fd].getNick() + " " + joinmsg.channel[i] + " :No such channel\r\n", fd);
@@ -398,12 +404,20 @@ void Server::handleCommand(IRCmessage msg, int fd)
 						std::string channelName = joinmsg.channel[i];							
 						std::map<std::string, Channel>::iterator it = _channels.find(channelName);
 						Channel *ch = NULL;
-						if (it == _channels.end()) // channel doesnt exist
+						if (it == _channels.end()) // if channel doesnt exist
 						{
 							Channel	&newChannel = _channels[channelName];  // create channel and inserted in place
 							newChannel._clients.push_back(_clients[fd]);
 							newChannel._operators.push_back(fd);
 							ch = &newChannel;
+							newChannel.setLimit(2); // default limit
+							if(i < joinmsg.key.size() && !joinmsg.key[i].empty())
+							{
+								newChannel.KeyProtected = true;
+								newChannel.setKey(joinmsg.key[i]);
+							}
+							else
+								newChannel.KeyProtected = false;
 							sendJoinResponses(ch, fd, channelName);
 						}
 						else
@@ -423,12 +437,27 @@ void Server::handleCommand(IRCmessage msg, int fd)
 								continue;
 							else
 							{
-									//MISSING:: TODO
-									// Check if user limit is reached
-									// check if channel is invite only
-									// and other MODES
+								if (ch->_clients.size() >= ch->getLimit())
+								{
+									polloutMessage(":ircserv 471 " + _clients[fd].getNick() + " " + channelName + " :Cannot join channel (+l)\r\n", fd);
+									continue;	
+								}
+								if (ch->KeyProtected)
+								{
+									if (joinmsg.key.size() == 0)
+									{
+										polloutMessage(":ircserv 475 " + _clients[fd].getNick() + " " + channelName + " :Cannot join channel (+k)\r\n", fd);
+										continue;
+									}
+									else if (joinmsg.key[i] != ch->getKey())
+									{
+										polloutMessage(":ircserv 475 " + _clients[fd].getNick() + " " + channelName + " :Cannot join channel (+k)\r\n", fd);
+										continue;
+									}
+								}
+									// and other MODE
 								ch->_clients.push_back(_clients[fd]); //add client to channel client list
-									// send (with RPL_TOPIC (332) and optionally RPL_TOPICWHOTIME (333)), and no message if the channel does not have a topic.
+								// send (with RPL_TOPIC (332) and optionally RPL_TOPICWHOTIME (333)), and no message if the channel does not have a topic.
 								sendJoinResponses(ch, fd, channelName);
 							}
 						}
