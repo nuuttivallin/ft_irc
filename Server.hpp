@@ -6,7 +6,7 @@
 /*   By: pbumidan <pbumidan@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/19 20:18:03 by nvallin           #+#    #+#             */
-/*   Updated: 2025/04/30 19:28:49 by pbumidan         ###   ########.fr       */
+/*   Updated: 2025/05/03 15:04:21 by pbumidan         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -54,7 +54,7 @@ class Server
 			std::vector<std::string> channel;
 			std::vector<std::string> key;
 		};
-		JOINmessage parseJoin(const std::string input);
+		JOINmessage parseJoin(const std::string ch, const std::string key);
 		void sendJoinResponses(Channel* ch, int fd, const std::string& channelName);
 		void handleCommand(IRCmessage msg, int fd);
 		void acceptNewClient();		

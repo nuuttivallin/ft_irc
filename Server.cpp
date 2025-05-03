@@ -6,7 +6,7 @@
 /*   By: pbumidan <pbumidan@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/19 20:18:18 by nvallin           #+#    #+#             */
-/*   Updated: 2025/04/30 20:57:49 by pbumidan         ###   ########.fr       */
+/*   Updated: 2025/05/03 15:24:10 by pbumidan         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -230,52 +230,13 @@ std::vector<std::string> splitJoinlist(const std::string &list)
 	return lines;
 }
 
-Server::JOINmessage Server::parseJoin(const std::string input)
+Server::JOINmessage Server::parseJoin(const std::string ch, const std::string key)
 {
 	JOINmessage msg;
-	std::string chlist;
-	std::string keylist;
-
-	size_t space_pos = input.find(' ');
-	if (space_pos != std::string::npos)
-	{
-		chlist = input.substr(0, space_pos);
-		if (space_pos + 1 < input.length())
-			keylist = input.substr(space_pos + 1);
-	}
-	else
-	{
-		chlist = input; // No keys provided
-	}
-	if (!chlist.empty())
-		msg.channel = splitJoinlist(chlist);
-	if (!keylist.empty())
-		msg.key = splitJoinlist(keylist);
-
+	msg.channel = splitJoinlist(ch);
+	msg.key = splitJoinlist(key);
 	return msg;
 }
-
-// void Server::sendJoinResponses(Channel* ch, int fd, const std::string& channelName)
-// {
-// 	for (size_t i = 0; i < ch->_clients.size(); i++)
-// 	{
-// 		std::string joinMsg = ":" + ch->_clients[fd].getNick() + "!" + ch->_clients[fd].getUser() + "@ircserv JOIN :" + channelName + "\r\n";
-// 		polloutMessage(joinMsg, ch->_clients[i].getFd());
-// 		if (ch->_clients[i].getFd() == fd)
-// 		{
-// 			//send RPL_NAMREPLY(353) + RPL_ENDOFNAMES(366) to the joining client
-// 			std::string names = "";
-// 			for (size_t j = 0; j < ch->_clients.size(); j++)
-// 			{
-// 				if (std::find(ch->_operators.begin(), ch->_operators.end(), ch->_clients[j].getFd()) != ch->_operators.end())
-// 					names += "@"; //operators should have an @
-// 				names += ch->_clients[j].getNick() + " ";
-// 			}
-// 			polloutMessage(":ircserv 353 " + ch->_clients[fd].getNick() + " = " + channelName + " :" + names + "\r\n", fd);
-// 			polloutMessage(":ircserv 366 " + ch->_clients[fd].getNick() + " " + channelName + " :End of NAMES list\r\n", fd);
-// 		}
-// 	}
-// }
 
 void Server::sendJoinResponses(Channel* ch, int fd, const std::string& channelName)
 {
@@ -407,14 +368,26 @@ void Server::handleCommand(IRCmessage msg, int fd)
 			if (msg.args.empty())
 			{
 				polloutMessage(":ircserv 461 * " + msg.cmd + " :Not enough parameters\r\n", fd);
+				return;
+			}
+			else if (msg.args.size() > 2)
+			{
+				polloutMessage(":ircserv 461 * " + msg.cmd + " :Too many parameters\r\n", fd);
+				return;
 			}
 			else
 			{
-				JOINmessage joinmsg = parseJoin(msg.args[0]);
-				std::cout << "CHECK: joinmsg.channel.size(): " << joinmsg.channel.size() << std::endl;
+				JOINmessage joinmsg;
+				std::cout << "CHECK: joinmsg.channel.size(): " << joinmsg.channel.size() << std::endl; //printcheck
+				if (msg.args.size() == 1)
+					joinmsg = parseJoin(msg.args[0],"");
+				else
+				{
+					joinmsg = parseJoin(msg.args[0], msg.args[1]);
+				}
 				for (size_t i = 0; i < joinmsg.channel.size(); ++i)
 				{
-					std::cout << "CHECK: joinmsg.channel[i]: " << joinmsg.channel[i] << std::endl;
+					std::cout << "CHECK: channel: " << joinmsg.channel[i] << std::endl; //printcheck
 					if (joinmsg.channel[i][0] != '#' && joinmsg.channel[i][0] != '&')
 					{
 						polloutMessage(":ircserv 403 " + _clients[fd].getNick() + " " + joinmsg.channel[i] + " :No such channel\r\n", fd);
@@ -422,7 +395,7 @@ void Server::handleCommand(IRCmessage msg, int fd)
 					}
 					else
 					{
-						std::string channelName = joinmsg.channel[i];
+						std::string channelName = joinmsg.channel[i];							
 						std::map<std::string, Channel>::iterator it = _channels.find(channelName);
 						Channel *ch = NULL;
 						if (it == _channels.end()) // channel doesnt exist
@@ -450,12 +423,12 @@ void Server::handleCommand(IRCmessage msg, int fd)
 								continue;
 							else
 							{
-								//MISSING:: TODO
-								// Check if user limit is reached
-								// check if channel is invite only
-								// and other MODES
+									//MISSING:: TODO
+									// Check if user limit is reached
+									// check if channel is invite only
+									// and other MODES
 								ch->_clients.push_back(_clients[fd]); //add client to channel client list
-								// send (with RPL_TOPIC (332) and optionally RPL_TOPICWHOTIME (333)), and no message if the channel does not have a topic.
+									// send (with RPL_TOPIC (332) and optionally RPL_TOPICWHOTIME (333)), and no message if the channel does not have a topic.
 								sendJoinResponses(ch, fd, channelName);
 							}
 						}
@@ -465,6 +438,7 @@ void Server::handleCommand(IRCmessage msg, int fd)
 		}
 	}
 }
+
 
 				//chatgpt version:
 				// // Construct JOIN message
