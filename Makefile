@@ -4,7 +4,7 @@ OFILES = $(CFILES:.cpp=.o)
 
 C++ = c++
 
-CFLAGS = -Wall -Wextra -Werror -std=c++98
+CFLAGS = -Wall -Wextra -Werror -std=c++11
 
 NAME = ircserv
 
