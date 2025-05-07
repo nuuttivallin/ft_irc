@@ -6,7 +6,7 @@
 /*   By: pbumidan <pbumidan@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/19 20:18:03 by nvallin           #+#    #+#             */
-/*   Updated: 2025/05/05 16:21:31 by pbumidan         ###   ########.fr       */
+/*   Updated: 2025/05/07 21:16:29 by pbumidan         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -56,6 +56,8 @@ class Server
 		};
 		JOINmessage JoinParse(const std::string ch, const std::string key);
 		void JoinSendResponses(Channel* ch, int fd, const std::string& channelName);
+		void TopicSendResponses(Channel* ch, int fd, const std::string& channelName);
+
 		void handleCommand(IRCmessage msg, int fd);
 		void acceptNewClient();		
 		void registerClient(int fd);
