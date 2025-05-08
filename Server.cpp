@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Server.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: nvallin <nvallin@student.hive.fi>          +#+  +:+       +#+        */
+/*   By: psitkin <psitkin@student.hive.fi>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/19 20:18:18 by nvallin           #+#    #+#             */
-/*   Updated: 2025/04/19 20:18:27 by nvallin          ###   ########.fr       */
+/*   Updated: 2025/05/08 16:50:35 by psitkin          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -289,6 +289,8 @@ void Server::handleCommand(IRCmessage msg, int fd)
 			else
 				polloutMessage(":ircserv " + msg.args[0], fd);
 		}
+		if (msg.cmd == "KICK")
+			handleKick(msg, fd);
 
 		// JOIN to join channels
 		// join(name)
@@ -362,4 +364,63 @@ void Server::polloutMessage(std::string msg, int fd)
 			break;
 		}
 	}
+}
+
+void Server::handleKick(const IRCmessage& msg, int fd)
+{
+	if (msg.args.size() < 2)
+	{
+		polloutMessage(":ircserv 461 " + _clients[fd].getNick() + " KICK :Not enough parameters\r\n", fd);
+		return;
+	}
+
+	std::string channelName = msg.args[0];
+	std::string targetNick = msg.args[1];
+
+	// chanel exist
+	if (_channels.find(channelName) == _channels.end())
+	{
+		polloutMessage(":ircserv 403 " + _clients[fd].getNick() + " " + channelName + " :No such channel\r\n", fd);
+		return;
+	}
+
+	Channel& channel = _channels[channelName];
+
+	// operator is valid
+	if (!channel.isOperator(fd))
+	{
+		polloutMessage(":ircserv 482 " + _clients[fd].getNick() + " " + channelName + " :You're not channel operator\r\n", fd);
+		return;
+	}
+
+	// finding user ID
+	int targetFd = -1;
+	for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
+	{
+		if (it->second.getNick() == targetNick)
+		{
+			targetFd = it->first;
+			break;
+		}
+	}
+
+	if (targetFd == -1)
+	{
+		polloutMessage(":ircserv 401 " + _clients[fd].getNick() + " " + targetNick + " :No such nick\r\n", fd);
+		return;
+	}
+
+	// Is user in channel
+	if (!channel.isMember(targetFd))
+	{
+		polloutMessage(":ircserv 441 " + targetNick + " " + channelName + " :They aren't on that channel\r\n", fd);
+		return;
+	}
+
+	std::string reason = (msg.args.size() >= 3) ? msg.args[2] : "Kicked";
+	std::string kickMsg = ":" + _clients[fd].getNick() + " KICK " + channelName + " " + targetNick + " :" + reason + "\r\n";
+
+	channel.broadcast(kickMsg);
+
+	channel.removeClient(targetFd);
 }

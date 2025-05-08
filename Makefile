@@ -1,4 +1,4 @@
-CFILES = main.cpp Client.cpp Server.cpp
+CFILES = main.cpp Client.cpp Server.cpp Channel.cpp
 
 OFILES = $(CFILES:.cpp=.o)
 
