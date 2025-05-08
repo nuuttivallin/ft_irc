@@ -14,6 +14,9 @@
 #include <iostream>
 #include <queue>
 #include <sys/socket.h>
+#include "Channel.hpp"
+
+class Channel;
 
 class Client
 {
@@ -35,6 +38,8 @@ class Client
 		void queueMessage(const std::string msg);
 		void sendData();
 		bool hasDataToSend();
+		std::vector<Channel> _channels;
+		std::string _partialRecieve;		
 	private:
 		int _fd;
 		std::string _ipAdd;
