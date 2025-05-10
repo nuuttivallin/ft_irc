@@ -6,7 +6,7 @@
 /*   By: psitkin <psitkin@student.hive.fi>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/19 20:18:03 by nvallin           #+#    #+#             */
-/*   Updated: 2025/05/08 16:13:31 by psitkin          ###   ########.fr       */
+/*   Updated: 2025/05/08 23:19:20 by psitkin          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -49,6 +49,13 @@ class Server
 			std::vector<std::string> args;
 		};
 		IRCmessage parse(const std::string msg);
+		struct JOINmessage
+		{
+			std::vector<std::string> channel;
+			std::vector<std::string> key;
+		};
+		JOINmessage JoinParse(const std::string ch, const std::string key);
+		void JoinSendResponses(Channel* ch, int fd, const std::string& channelName);
 		void handleCommand(IRCmessage msg, int fd);
 		void acceptNewClient();		
 		void registerClient(int fd);
