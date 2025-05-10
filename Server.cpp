@@ -6,7 +6,7 @@
 /*   By: pbumidan <pbumidan@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/19 20:18:18 by nvallin           #+#    #+#             */
-/*   Updated: 2025/05/08 20:11:51 by pbumidan         ###   ########.fr       */
+/*   Updated: 2025/05/10 20:18:30 by pbumidan         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -232,23 +232,39 @@ Server::JOINmessage Server::JoinParse(const std::string ch, const std::string ke
 
 void Server::TopicResponses(Channel* ch, int fd, const std::string& channelName)
 {
-	if (ch->getTopic("topic").empty())
-	{
-		//RPL_NOTOPIC 331
-		polloutMessage(":ircserv 331 " + _clients[fd].getNick() + " " + channelName + " :No topic is set\r\n", fd);
+	std::string nick = _clients[fd].getNick();
+
+	std::string topic = ch->getTopic("topic");
+	std::string setBy = ch->getTopic("setBy");
+	std::string setAt = ch->getTopic("setAt");
+
+	if (topic.empty()) {
+		polloutMessage(":ircserv 331 " + nick + " " + channelName + " :No topic is set\r\n", fd);
 		return;
 	}
-	else
-	{
-		//RPL_TOPIC 332
-		polloutMessage(":ircserv 332 " + _clients[fd].getNick() + " " + channelName + " :" + ch->getTopic("topic") + "\r\n", fd);
+
+	polloutMessage(":ircserv 332 " + nick + " " + channelName + " :" + topic + "\r\n", fd);
+
+	if (!setBy.empty() && !setAt.empty()) {
+		polloutMessage(":ircserv 333 " + nick + " " + channelName + " " + setBy + " " + setAt + "\r\n", fd);
 	}
-	if (!ch->getTopic("setBy").empty() && !ch->getTopic("setAt").empty())
-	{
-		//RPL_TOPICWHOTIME 333
-		std::string topicWhoTime = ":ircserv 333 " + _clients[fd].getNick() + " " + channelName + " " + ch->getTopic("setBy") + " " + ch->getTopic("setAt") + "\r\n";
-		polloutMessage(topicWhoTime, fd);
-	}
+	// if (ch->getTopic("topic").empty())
+	// {
+	// 	//RPL_NOTOPIC 331
+	// 	polloutMessage(":ircserv 331 " + _clients[fd].getNick() + " " + channelName + " :No topic is set\r\n", fd);
+	// 	return;
+	// }
+	// else
+	// {
+	// 	//RPL_TOPIC 332
+	// 	polloutMessage(":ircserv 332 " + _clients[fd].getNick() + " " + channelName + " :" + ch->getTopic("topic") + "\r\n", fd);
+	// }
+	// if (!ch->getTopic("setBy").empty() && !ch->getTopic("setAt").empty())
+	// {
+	// 	//RPL_TOPICWHOTIME 333
+	// 	std::string topicWhoTime = ":ircserv 333 " + _clients[fd].getNick() + " " + channelName + " " + ch->getTopic("setBy") + " " + ch->getTopic("setAt") + "\r\n";
+	// 	polloutMessage(topicWhoTime, fd);
+	// }
 }
 void Server::JoinResponses(Channel* ch, int fd, const std::string& channelName)
 {
@@ -407,18 +423,31 @@ void Server::handleCommand(IRCmessage msg, int fd)
 						polloutMessage(":ircserv 442 " + _clients[fd].getNick() + " " + msg.args[0] + " :You're not on that channel\r\n", fd);
 						return;
 					}
-					if (!ch->isOperator(fd))
+					if (msg.args.size() == 1)
 					{
-						polloutMessage(":ircserv 482 " + _clients[fd].getNick() + " " + msg.args[0] + " :You're not channel operator\r\n", fd);
-						return;
+						// if (ch->getTopic("topic").empty())
+						// 	polloutMessage(":ircserv 331 " + _clients[fd].getNick() + " " + msg.args[0] + " :No topic is set\r\n", fd);
+						// else
+						// polloutMessage(":ircserv 332 " + _clients[fd].getNick() + " " + msg.args[0] + " :" + ch->getTopic("topic") + "\r\n", fd);
+						TopicResponses(ch,fd,msg.args[0]);
 					}
 					else
 					{
-						if (msg.args.size() == 1)
-							polloutMessage(":ircserv 331 " + _clients[fd].getNick() + " " + msg.args[0] + " :No topic is set\r\n", fd);
+						if (!ch->isOperator(fd) && ch->isTopicProtected)
+						{
+							polloutMessage(":ircserv 482 " + _clients[fd].getNick() + " " + msg.args[0] + " :You're not channel operator\r\n", fd);
+							return;
+						}
 						else
 						{
-							ch->setTopic(msg.args[1],  _clients[fd].getNick() + "!~" + _clients[fd].getUser() + "@ircserv", std::to_string(time(NULL)));
+							if (msg.args[1].size() == 1 && msg.args[1][0] == ':')
+							{
+								ch->setTopic("", "", "");
+							}
+							else
+							{
+								ch->setTopic(msg.args[1],  _clients[fd].getNick() + "!~" + _clients[fd].getUser() + "@ircserv", std::to_string(time(NULL)));
+							}
 							TopicResponses(ch, fd, msg.args[0]);
 							std::string topicMsg = ":" + _clients[fd].getNick() + "!~" + _clients[fd].getUser() + "@ircserv TOPIC " + msg.args[0] + " :" + ch->getTopic("topic") + "\r\n";
 							for (size_t k = 0; k < ch->_clients.size(); k++)
@@ -494,7 +523,7 @@ void Server::handleCommand(IRCmessage msg, int fd)
 							ch = &newChannel;
 							newChannel.setLimit(2); // default limit should be set to MAX_INT
 							newChannel.isInviteOnly = false;
-							newChannel.isTopicProtected = false;
+							newChannel.isTopicProtected = true;
 							newChannel.setTopic("", "", "");
 							if(i < joinmsg.key.size() && !joinmsg.key[i].empty())
 							{
