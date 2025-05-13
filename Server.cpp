@@ -6,7 +6,7 @@
 /*   By: pbumidan <pbumidan@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/19 20:18:18 by nvallin           #+#    #+#             */
-/*   Updated: 2025/05/10 20:18:30 by pbumidan         ###   ########.fr       */
+/*   Updated: 2025/05/13 16:17:49 by pbumidan         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -222,6 +222,28 @@ std::vector<std::string> splitJoinlist(const std::string &list)
 	return lines;
 }
 
+std::vector<std::string> Server::PartParse(const std::string &list)
+{
+	std::vector<std::string> lines;
+
+	if (list.empty())
+		return lines;
+
+	size_t start = 0;
+	while (start <= list.size())
+	{
+		size_t end = list.find(',', start);
+		if (end == std::string::npos)
+		{
+			lines.push_back(list.substr(start)); // May be empty
+			break;
+		}
+		lines.push_back(list.substr(start, end - start)); // May be empty
+		start = end + 1;
+	}
+	return lines;
+}
+
 Server::JOINmessage Server::JoinParse(const std::string ch, const std::string key)
 {
 	Server::JOINmessage msg;
@@ -407,7 +429,6 @@ void Server::handleCommand(IRCmessage msg, int fd)
 				}
 				else
 				{
-					// TO DO: if non channel operators are allowed to change topic or if topic is protected
 					Channel *ch = &(it->second);
 					bool notOnChannel = true;
 					for (size_t k = 0; k < ch->_clients.size(); k++)
@@ -425,10 +446,6 @@ void Server::handleCommand(IRCmessage msg, int fd)
 					}
 					if (msg.args.size() == 1)
 					{
-						// if (ch->getTopic("topic").empty())
-						// 	polloutMessage(":ircserv 331 " + _clients[fd].getNick() + " " + msg.args[0] + " :No topic is set\r\n", fd);
-						// else
-						// polloutMessage(":ircserv 332 " + _clients[fd].getNick() + " " + msg.args[0] + " :" + ch->getTopic("topic") + "\r\n", fd);
 						TopicResponses(ch,fd,msg.args[0]);
 					}
 					else
@@ -453,6 +470,89 @@ void Server::handleCommand(IRCmessage msg, int fd)
 							for (size_t k = 0; k < ch->_clients.size(); k++)
 							{
 								polloutMessage(topicMsg, ch->_clients[k]->getFd());
+							}
+						}
+					}
+				}
+			}
+		}
+		if (msg.cmd == "PART")
+		{
+			if (msg.args.empty())
+			{
+				polloutMessage(":ircserv 461 * " + msg.cmd + " :Not enough parameters\r\n", fd);
+				return;
+			}
+			else if (msg.args.size() > 2)
+			{
+				polloutMessage(":ircserv 461 * " + msg.cmd + " :Too many parameters\r\n", fd);
+				return;
+			}
+			else
+			{
+				std::vector<std::string> partmsg;
+				partmsg = PartParse(msg.args[0]);
+				std::string reason;
+				if (msg.args.size() == 2)
+					reason = msg.args[1];
+				std::cout << "CHECK: partmessage.channel.size(): " << partmsg.size() << std::endl; //printcheck delete later
+				for (size_t i = 0; i < partmsg.size(); ++i)
+				{
+					std::cout << "CHECK: channel: " << partmsg[i] << std::endl; //printcheck, delete later
+					if (partmsg[i].empty() || (partmsg[i][0] != '#' && partmsg[i][0] != '&'))
+					{
+						polloutMessage(":ircserv 403 " + _clients[fd].getNick() + " " + partmsg[i] + " :No such channel\r\n", fd);
+						continue;
+					}
+					else if ((partmsg[i][0] == '#' || partmsg[i][0] == '&') && partmsg[i].size() == 1)
+					{
+						polloutMessage(":ircserv 403 " + _clients[fd].getNick() + " " + partmsg[i] + " :No such channel\r\n", fd);
+						continue;
+					}
+					else if (partmsg[i].find_first_of(" ,:\x07") != std::string::npos)
+					{
+						polloutMessage(":ircserv 403 " + _clients[fd].getNick() + " " + partmsg[i] + " :No such channel\r\n", fd);
+						continue;
+					}
+					else
+					{
+						std::string channelName = partmsg[i];							
+						std::map<std::string, Channel>::iterator it = _channels.find(channelName);
+						Channel *ch = NULL;
+						if (it == _channels.end()) 
+						{
+							polloutMessage(":ircserv 403 " + _clients[fd].getNick() + " " + channelName + " :No such channel\r\n", fd);
+						}
+						else
+						{
+							ch = &(it->second);
+							bool removed = false;
+							std::string partMsg = ":" + _clients[fd].getNick() + "!~" + _clients[fd].getUser() +"@ircserv PART " + channelName;
+							if (!reason.empty())
+								partMsg += " :" + reason;
+							partMsg += "\r\n";
+							for (std::vector<Client*>::iterator it = ch->_clients.begin(); it != ch->_clients.end(); ++it)
+							{
+								if ((*it)->getFd() == fd)
+								{
+									ch->_clients.erase(it);
+									removed = true;
+									break;
+								}
+							}
+							if (!removed)
+							{
+								polloutMessage(":ircserv 442 " + _clients[fd].getNick() + " " + channelName + " :You're not on that channel\r\n", fd);
+								continue;
+							}
+							else
+							{
+								for (size_t k = 0; k < ch->_clients.size(); ++k)
+								{
+									if (ch->_clients[k]->getFd() != fd)
+										polloutMessage(partMsg, ch->_clients[k]->getFd());
+								}
+								polloutMessage(partMsg, fd); // Send to self after
 							}
 						}
 					}
