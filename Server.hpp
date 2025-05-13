@@ -6,7 +6,7 @@
 /*   By: pbumidan <pbumidan@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/19 20:18:03 by nvallin           #+#    #+#             */
-/*   Updated: 2025/05/13 16:09:24 by pbumidan         ###   ########.fr       */
+/*   Updated: 2025/05/13 18:14:18 by pbumidan         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -59,6 +59,13 @@ class Server
 		void TopicResponses(Channel* ch, int fd, const std::string& channelName);
 		std::vector<std::string> _Partlist;
 		std::vector<std::string> PartParse(const std::string &list);
+		struct MODEmessage
+		{
+			std::string add;
+			std::string remove;
+			std::string param;
+		};
+		MODEmessage ModeParse(const std::string args, const std::string param);
 		void handleCommand(IRCmessage msg, int fd);
 		void acceptNewClient();		
 		void registerClient(int fd);
