@@ -6,7 +6,7 @@
 /*   By: pbumidan <pbumidan@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/19 20:18:18 by nvallin           #+#    #+#             */
-/*   Updated: 2025/05/13 16:17:49 by pbumidan         ###   ########.fr       */
+/*   Updated: 2025/05/13 16:39:41 by pbumidan         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -566,16 +566,34 @@ void Server::handleCommand(IRCmessage msg, int fd)
 				polloutMessage(":ircserv 461 * " + msg.cmd + " :Not enough parameters\r\n", fd); //i use this for now
 				return;
 			}
-			// else if (msg.args.size() == 1 && msg.args[0] == "0")
-			// {
-			// 	// EDIT:client leave all joined channels:
-			// 	/*Note that this command also accepts the special argument of ("0", 0x30) 
-			// 	instead of any of the usual parameters, 
-			// 	which requests that the sending client leave all channels they are currently connected to. 
-			// 	The server will process this command as though the client had sent a 
-			// 	PART command for each channel they are a member of.*/
-
-			// }
+			else if (msg.args.size() == 1 && msg.args[0] == "0")
+			{
+				std::map<std::string, Channel>::iterator it;
+				for (it = _channels.begin(); it != _channels.end(); it++)
+				{
+					Channel *ch = &(it->second);
+					bool removed = false;
+					std::string partMsg = ":" + _clients[fd].getNick() + "!~" + _clients[fd].getUser() +"@ircserv PART " + it->first + "\r\n";
+					for (std::vector<Client*>::iterator it = ch->_clients.begin(); it != ch->_clients.end(); ++it)
+					{
+						if ((*it)->getFd() == fd)
+						{
+							ch->_clients.erase(it);
+							removed = true;
+							break;
+						}
+					}
+					if (removed)
+					{
+						for (size_t k = 0; k < ch->_clients.size(); ++k)
+						{
+							if (ch->_clients[k]->getFd() != fd)
+								polloutMessage(partMsg, ch->_clients[k]->getFd());
+						}
+						polloutMessage(partMsg, fd); // Send to self after
+					}
+				}
+			}
 			else if (msg.args.size() > 2)
 			{
 				polloutMessage(":ircserv 461 * " + msg.cmd + " :Too many parameters\r\n", fd);
