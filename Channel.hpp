@@ -3,6 +3,10 @@
 #include "Client.hpp"
 #include <bits/stdc++.h>
 
+#ifndef MAX_CHANNEL_USERS
+#define MAX_CHANNEL_USERS 65535
+#endif
+
 class Client;
 
 class Channel
@@ -22,6 +26,7 @@ class Channel
 		std::vector<int> _operators;
 		std::vector<Client*> _invited;
 		bool isOperator(int clientFd);
+		bool isLimitset;
 		void setLimit(size_t limit);
 		size_t getLimit();
 		bool isKeyProtected;

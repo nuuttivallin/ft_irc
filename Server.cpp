@@ -6,7 +6,7 @@
 /*   By: pbumidan <pbumidan@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/19 20:18:18 by nvallin           #+#    #+#             */
-/*   Updated: 2025/05/13 19:27:58 by pbumidan         ###   ########.fr       */
+/*   Updated: 2025/05/19 19:11:14 by pbumidan         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -324,28 +324,42 @@ void Server::JoinResponses(Channel* ch, int fd, const std::string& channelName)
     }
 }
 
-Server::MODEmessage Server::ModeParse(const std::string args, const std::string param)
+Server::MODEmessage Server::ModeParse(const std::string modes, const std::string param)
 {
+	MODEmessage result;
+    std::istringstream paramStream(param);
+    std::vector<std::string> paramList;
+    std::string p;
+    while (paramStream >> p)
+        paramList.push_back(p);
 
-	MODEmessage msg;
-	msg.param = param;
-	size_t start = 0;
-	while (start <= args.size())
-	{
-		size_t end = args.find_first_of("+-", start);
-		if (end == std::string::npos)
-		{
-			msg.add = "";
-			msg.remove = "";
-			break;
-		}
-		if (args[end] == '+')
-			msg.add += args.substr(start,end - start); // May be empty
-		else if (args[end] == '-')
-			msg.remove += args.substr(start,end - start); // May be empty
-		start = end + 1;
-	}
-	return msg;
+    bool adding = true;
+    size_t paramIndex = 0;
+
+    for (size_t i = 0; i < modes.length(); ++i) {
+        char c = modes[i];
+
+        if (c == '+') {
+            adding = true;
+        } else if (c == '-') {
+            adding = false;
+        } else {
+            if (adding) {
+                result.add += c;
+                if (c == 'k' || c == 'l') {
+                    if (paramIndex < paramList.size())
+                        result.param.push_back(paramList[paramIndex++]);
+                    else
+                        break; // Not enough parameters
+                }
+            } else {
+                result.remove += c;
+                // no param needed when removing +k or +l
+            }
+        }
+    }
+
+    return result;
 }
 
 void Server::handleCommand(IRCmessage msg, int fd)
@@ -598,15 +612,23 @@ void Server::handleCommand(IRCmessage msg, int fd)
 			}
 			else
 			{
-				std::map<std::string, Channel>::iterator it = _channels.find(msg.args[0]);
-				if (it == _channels.end())
+				if (_channels.find(msg.args[0]) == _channels.end())
 				{
 					polloutMessage(":ircserv 403 " + _clients[fd].getNick() + " " + msg.args[0] + " :No such channel\r\n", fd);
 					return;
 				}
 				else
 				{
-					Channel *ch = &(it->second);
+					Channel *ch = &(_channels[msg.args[0]]);
+					bool notOnChannel = true;
+					for (size_t k = 0; k < ch->_clients.size(); k++)
+					{
+						if (ch->_clients[k]->getFd() == fd)
+						{
+							notOnChannel = false;
+							break;
+						}
+					}
 					if (msg.args.size() == 1)
 					{
 						std::string modes = "";
@@ -616,21 +638,27 @@ void Server::handleCommand(IRCmessage msg, int fd)
 							modes += "t";
 						if (ch->isKeyProtected)
 							modes += "k";
-						polloutMessage(":ircserv 324 " + _clients[fd].getNick() + " " + msg.args[0] + " +" + modes + "\r\n", fd);
+						if (ch->isLimitset)
+							modes += "l";
+						if (notOnChannel == true)
+							polloutMessage(":ircserv 324 " + _clients[fd].getNick() + " " + msg.args[0] + " +" + modes + "\r\n", fd);
+						else
+						{
+							std::string reply = ":ircserv 324 " + _clients[fd].getNick() + " " + msg.args[0] + " +" + modes;
+							if (!notOnChannel) 
+							{
+								if (ch->isKeyProtected)
+									reply += " " + ch->getKey();
+								if (ch->isLimitset)
+									reply += " " + std::to_string(ch->getLimit());
+							}
+							reply += "\r\n";
+							polloutMessage(reply, fd);
+						}
 						return;
 					}
 					else
 					{
-						
-						bool notOnChannel = true;
-						for (size_t k = 0; k < ch->_clients.size(); k++)
-						{
-							if (ch->_clients[k]->getFd() == fd)
-							{
-								notOnChannel = false;
-								break;
-							}
-						}
 						if (notOnChannel)
 						{
 							polloutMessage(":ircserv 442 " + _clients[fd].getNick() + " " + msg.args[0] + " :You're not on that channel\r\n", fd);
@@ -645,73 +673,75 @@ void Server::handleCommand(IRCmessage msg, int fd)
 							}
 							else
 							{
-								MODEmessage modeargs;
-								if (msg.args.size() == 2)
-									modeargs = ModeParse(msg.args[1], "");
-								else 
-									modeargs = ModeParse(msg.args[1], msg.args[2]);
-								if (modeargs.add.empty() && modeargs.remove.empty())
-								{
-									polloutMessage(":ircserv 472 " + _clients[fd].getNick() + " " + msg.args[0] + " :is unknown mode char to me\r\n", fd);
-									return;
-								}
+								std::string modeParams = "";
+								if (msg.args.size() == 3)
+									modeParams = msg.args[2];
+								MODEmessage modeargs = ModeParse(msg.args[1], modeParams);
+								size_t requiredParams = 0;
 								for (size_t i = 0; i < modeargs.add.size(); ++i)
 								{
-									if (modeargs.add[i] == 'i')
+									if (modeargs.add[i] == 'k' || modeargs.add[i] == 'l' )
+										requiredParams++;
+								}
+								if (modeargs.param.size() < requiredParams)
+								{
+									polloutMessage(":ircserv 461 " + _clients[fd].getNick() + " " + msg.cmd + " :Not enough parameters\r\n", fd);
+									return;
+								}
+								//TO DO::: for everymode change, broadcast to all clients:
+								size_t paramIdx = 0;
+								for (size_t i = 0; i < modeargs.add.size(); ++i)
+								{
+									char c = modeargs.add[i];
+									if (c == 'i')
 									{
 										ch->isInviteOnly = true;
 										polloutMessage(":ircserv 221 " + _clients[fd].getNick() + " " + msg.args[0] + " :+i\r\n", fd);
-									}
-									else if (modeargs.add[i] == 't')
-									{
+									} 
+									else if (c == 't') {
 										ch->isTopicProtected = true;
 										polloutMessage(":ircserv 221 " + _clients[fd].getNick() + " " + msg.args[0] + " :+t\r\n", fd);
-									}
-									else if (modeargs.add[i] == 'k')
+									} 
+									else if (c == 'k') {
+										ch->setKey(modeargs.param[paramIdx++]);
+										ch->isKeyProtected = true;
+										polloutMessage(":ircserv 221 " + _clients[fd].getNick() + " " + msg.args[0] + " :+k\r\n", fd);
+									} 
+									else if (c == 'l') 
 									{
-										if (modeargs.param.empty())
+										int limit = std::atol(modeargs.param[paramIdx++].c_str());
+										if (limit > MAX_CHANNEL_USERS || limit < 0)
 										{
-											polloutMessage(":ircserv 461 " + _clients[fd].getNick() + " " + msg.cmd + " :Not enough parameters\r\n", fd);
+											polloutMessage(":ircserv 461 " + _clients[fd].getNick() + " " + msg.args[0] + " :Invalid limit parameter\r\n", fd);	
 											return;
 										}
-										else if (modeargs.param.size() > 1)
-										{
-											polloutMessage(":ircserv 461 " + _clients[fd].getNick() + " " + msg.cmd + " :Too many parameters\r\n", fd);
-											return;
-										}
-										else
-										{
-											ch->setKey(modeargs.param);
-											ch->isKeyProtected = true;
-											polloutMessage(":ircserv 221 " + _clients[fd].getNick() + " " + msg.args[0] + " :+k\r\n", fd);
-										}
-									}
-									else
-									{
+										ch->setLimit(limit);
+										ch->isLimitset = true;
+										polloutMessage(":ircserv 221 " + _clients[fd].getNick() + " " + msg.args[0] + " :+l\r\n", fd);
+									} 
+									else {
 										polloutMessage(":ircserv 472 " + _clients[fd].getNick() + " " + msg.args[0] + " :is unknown mode char to me\r\n", fd);	
 										return;
 									}
 								}
-								for (size_t i = 0; i < modeargs.remove.size(); ++i)
+								for (size_t i = 0; i < modeargs.remove.size(); ++i) 
 								{
-									if (modeargs.remove[i] == 'i')
-									{
+									char c = modeargs.remove[i];
+									if (c == 'i') {
 										ch->isInviteOnly = false;
 										polloutMessage(":ircserv 221 " + _clients[fd].getNick() + " " + msg.args[0] + " :-i\r\n", fd);
-									}
-									else if (modeargs.remove[i] == 't')
-									{
+									} else if (c == 't') {
 										ch->isTopicProtected = false;
 										polloutMessage(":ircserv 221 " + _clients[fd].getNick() + " " + msg.args[0] + " :-t\r\n", fd);
-									}
-									else if (modeargs.remove[i] == 'k')
-									{
+									} else if (c == 'k') {
 										ch->setKey("");
 										ch->isKeyProtected = false;
 										polloutMessage(":ircserv 221 " + _clients[fd].getNick() + " " + msg.args[0] + " :-k\r\n", fd);
-									}
-									else
-									{
+									} else if (c == 'l') {
+										ch->setLimit(MAX_CHANNEL_USERS);
+										ch->isLimitset = false;
+										polloutMessage(":ircserv 221 " + _clients[fd].getNick() + " " + msg.args[0] + " :-l\r\n", fd);
+									} else {
 										polloutMessage(":ircserv 472 " + _clients[fd].getNick() + " " + msg.args[0] + " :is unknown mode char to me\r\n", fd);	
 										return;
 									}
@@ -802,10 +832,7 @@ void Server::handleCommand(IRCmessage msg, int fd)
 							newChannel._clients.push_back(&_clients[fd]);
 							newChannel._operators.push_back(fd);
 							ch = &newChannel;
-							newChannel.setLimit(2); // default limit should be set to MAX_INT
-							// newChannel.isInviteOnly = false;
-							// newChannel.isTopicProtected = true;
-							// newChannel.setTopic("", "", "");
+							newChannel.setLimit(MAX_CHANNEL_USERS);
 							if(i < joinmsg.key.size() && !joinmsg.key[i].empty())
 							{
 								newChannel.isKeyProtected = true;
@@ -865,7 +892,7 @@ void Server::handleCommand(IRCmessage msg, int fd)
 									}
 									if (!invited)
 									{
-										polloutMessage(":ircserv 473 " + _clients[fd].getNick() + " " + channelName + " :Cannot join channel (+i)\r\n", fd);
+										polloutMessage(":ircserv 468 " + _clients[fd].getNick() + " " + channelName + " :Cannot join channel (+i)\r\n", fd);
 										continue;
 									}
 								}

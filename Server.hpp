@@ -6,7 +6,7 @@
 /*   By: pbumidan <pbumidan@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/19 20:18:03 by nvallin           #+#    #+#             */
-/*   Updated: 2025/05/13 18:14:18 by pbumidan         ###   ########.fr       */
+/*   Updated: 2025/05/19 16:12:59 by pbumidan         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -63,7 +63,7 @@ class Server
 		{
 			std::string add;
 			std::string remove;
-			std::string param;
+			std::vector<std::string> param;
 		};
 		MODEmessage ModeParse(const std::string args, const std::string param);
 		void handleCommand(IRCmessage msg, int fd);
