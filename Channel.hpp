@@ -18,9 +18,9 @@ class Channel
 		};
 		Topic _topic;
 	public:
-		std::vector<Client> _clients;
+		std::vector<Client*> _clients;
 		std::vector<int> _operators;
-		std::vector<Client> _invited;
+		std::vector<Client*> _invited;
 		bool isOperator(int clientFd);
 
 		bool isMember(int fd) const;

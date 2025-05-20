@@ -6,7 +6,7 @@
 /*   By: psitkin <psitkin@student.hive.fi>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/19 20:18:18 by nvallin           #+#    #+#             */
-/*   Updated: 2025/05/08 23:19:10 by psitkin          ###   ########.fr       */
+/*   Updated: 2025/05/10 20:18:30 by pbumidan         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -235,12 +235,48 @@ Server::JOINmessage Server::JoinParse(const std::string ch, const std::string ke
 	return msg;
 }
 
-void Server::JoinSendResponses(Channel* ch, int fd, const std::string& channelName)
+void Server::TopicResponses(Channel* ch, int fd, const std::string& channelName)
+{
+	std::string nick = _clients[fd].getNick();
+
+	std::string topic = ch->getTopic("topic");
+	std::string setBy = ch->getTopic("setBy");
+	std::string setAt = ch->getTopic("setAt");
+
+	if (topic.empty()) {
+		polloutMessage(":ircserv 331 " + nick + " " + channelName + " :No topic is set\r\n", fd);
+		return;
+	}
+
+	polloutMessage(":ircserv 332 " + nick + " " + channelName + " :" + topic + "\r\n", fd);
+
+	if (!setBy.empty() && !setAt.empty()) {
+		polloutMessage(":ircserv 333 " + nick + " " + channelName + " " + setBy + " " + setAt + "\r\n", fd);
+	}
+	// if (ch->getTopic("topic").empty())
+	// {
+	// 	//RPL_NOTOPIC 331
+	// 	polloutMessage(":ircserv 331 " + _clients[fd].getNick() + " " + channelName + " :No topic is set\r\n", fd);
+	// 	return;
+	// }
+	// else
+	// {
+	// 	//RPL_TOPIC 332
+	// 	polloutMessage(":ircserv 332 " + _clients[fd].getNick() + " " + channelName + " :" + ch->getTopic("topic") + "\r\n", fd);
+	// }
+	// if (!ch->getTopic("setBy").empty() && !ch->getTopic("setAt").empty())
+	// {
+	// 	//RPL_TOPICWHOTIME 333
+	// 	std::string topicWhoTime = ":ircserv 333 " + _clients[fd].getNick() + " " + channelName + " " + ch->getTopic("setBy") + " " + ch->getTopic("setAt") + "\r\n";
+	// 	polloutMessage(topicWhoTime, fd);
+	// }
+}
+void Server::JoinResponses(Channel* ch, int fd, const std::string& channelName)
 {
     Client* joiningClient = NULL;
     for (size_t k = 0; k < ch->_clients.size(); ++k) {
-        if (ch->_clients[k].getFd() == fd) {
-            joiningClient = &ch->_clients[k];
+        if (ch->_clients[k]->getFd() == fd) {
+            joiningClient = ch->_clients[k];
             break;
         }
     }
@@ -250,18 +286,20 @@ void Server::JoinSendResponses(Channel* ch, int fd, const std::string& channelNa
     for (size_t i = 0; i < ch->_clients.size(); i++)
     {
         std::string joinMsg = ":" + joiningClient->getNick() + "!" + joiningClient->getUser() + "@ircserv JOIN :" + channelName + "\r\n";
-        polloutMessage(joinMsg, ch->_clients[i].getFd());
+        polloutMessage(joinMsg, ch->_clients[i]->getFd());
 
-        if (ch->_clients[i].getFd() == fd)
+        if (ch->_clients[i]->getFd() == fd)
         {
-            // Send 353 and 366 replies
+			// send RPL_TOPIC (332) and optionally RPL_TOPICWHOTIME (333)
+			TopicResponses(ch, fd, channelName);
             std::string names;
             for (size_t j = 0; j < ch->_clients.size(); j++)
             {
-                if (std::find(ch->_operators.begin(), ch->_operators.end(), ch->_clients[j].getFd()) != ch->_operators.end())
-                    names += "@"; // operator
-                names += ch->_clients[j].getNick() + " ";
+				if (std::find(ch->_operators.begin(), ch->_operators.end(), ch->_clients[j]->getFd()) != ch->_operators.end())
+				names += "@"; // operator
+                names += ch->_clients[j]->getNick() + " ";
             }
+			// Send RPL_NAMREPLY 353 and RPL_ENDOFNAMES 366
             polloutMessage(":ircserv 353 " + joiningClient->getNick() + " = " + channelName + " :" + names + "\r\n", fd);
             polloutMessage(":ircserv 366 " + joiningClient->getNick() + " " + channelName + " :End of NAMES list\r\n", fd);
         }
@@ -388,21 +426,59 @@ void Server::handleCommand(IRCmessage msg, int fd)
 			{
 				std::map<std::string, Channel>::iterator it = _channels.find(msg.args[0]);
 				if (it == _channels.end())
-					// channel doesn't exist 
-					polloutMessage(":ircserv 442 " + _clients[fd].getNick() + " " + msg.args[0] + " :You're not on that channel\r\n", fd);
+				{
+					polloutMessage(":ircserv 403 " + _clients[fd].getNick() + " " + msg.args[0] + " :No such channel\r\n", fd);
+					return;
+				}
 				else
 				{
+					// TO DO: if non channel operators are allowed to change topic or if topic is protected
 					Channel *ch = &(it->second);
-					if (!ch->isOperator(fd))
-						polloutMessage(":ircserv 482 " + _clients[fd].getNick() + " " + msg.args[0] + " :You're not channel operator\r\n", fd);
+					bool notOnChannel = true;
+					for (size_t k = 0; k < ch->_clients.size(); k++)
+					{
+						if (ch->_clients[k]->getFd() == fd)
+						{
+							notOnChannel = false;
+							break;
+						}
+					}
+					if (notOnChannel)
+					{
+						polloutMessage(":ircserv 442 " + _clients[fd].getNick() + " " + msg.args[0] + " :You're not on that channel\r\n", fd);
+						return;
+					}
+					if (msg.args.size() == 1)
+					{
+						// if (ch->getTopic("topic").empty())
+						// 	polloutMessage(":ircserv 331 " + _clients[fd].getNick() + " " + msg.args[0] + " :No topic is set\r\n", fd);
+						// else
+						// polloutMessage(":ircserv 332 " + _clients[fd].getNick() + " " + msg.args[0] + " :" + ch->getTopic("topic") + "\r\n", fd);
+						TopicResponses(ch,fd,msg.args[0]);
+					}
 					else
 					{
-						if (msg.args.size() == 1)
-							polloutMessage(":ircserv 331 " + _clients[fd].getNick() + " " + msg.args[0] + " :No topic is set\r\n", fd);
+						if (!ch->isOperator(fd) && ch->isTopicProtected)
+						{
+							polloutMessage(":ircserv 482 " + _clients[fd].getNick() + " " + msg.args[0] + " :You're not channel operator\r\n", fd);
+							return;
+						}
 						else
 						{
-							ch->setTopic(msg.args[1], _clients[fd].getNick(), std::to_string(time(NULL)));
-							polloutMessage(":" + _clients[fd].getNick() + "!~" + _clients[fd].getUser() + "@ircserv TOPIC :" + ch->getTopic("topic"), fd);
+							if (msg.args[1].size() == 1 && msg.args[1][0] == ':')
+							{
+								ch->setTopic("", "", "");
+							}
+							else
+							{
+								ch->setTopic(msg.args[1],  _clients[fd].getNick() + "!~" + _clients[fd].getUser() + "@ircserv", std::to_string(time(NULL)));
+							}
+							TopicResponses(ch, fd, msg.args[0]);
+							std::string topicMsg = ":" + _clients[fd].getNick() + "!~" + _clients[fd].getUser() + "@ircserv TOPIC " + msg.args[0] + " :" + ch->getTopic("topic") + "\r\n";
+							for (size_t k = 0; k < ch->_clients.size(); k++)
+							{
+								polloutMessage(topicMsg, ch->_clients[k]->getFd());
+							}
 						}
 					}
 				}
@@ -463,15 +539,17 @@ void Server::handleCommand(IRCmessage msg, int fd)
 						std::string channelName = joinmsg.channel[i];							
 						std::map<std::string, Channel>::iterator it = _channels.find(channelName);
 						Channel *ch = NULL;
-						if (it == _channels.end()) // if channel doesnt exist
+						if (it == _channels.end()) 
 						{
+							// if channel doesnt exist
 							Channel	&newChannel = _channels[channelName];  // create channel and inserted in place
-							newChannel._clients.push_back(_clients[fd]);
+							newChannel._clients.push_back(&_clients[fd]);
 							newChannel._operators.push_back(fd);
 							ch = &newChannel;
-							newChannel.setLimit(3); // default limit set to MAX_INT
+							newChannel.setLimit(2); // default limit should be set to MAX_INT
 							newChannel.isInviteOnly = false;
-							newChannel.isTopicProtected = false;
+							newChannel.isTopicProtected = true;
+							newChannel.setTopic("", "", "");
 							if(i < joinmsg.key.size() && !joinmsg.key[i].empty())
 							{
 								newChannel.isKeyProtected = true;
@@ -480,15 +558,16 @@ void Server::handleCommand(IRCmessage msg, int fd)
 							else
 								newChannel.isKeyProtected = false;
 							_clients[fd]._channels.push_back(ch);
-							JoinSendResponses(ch, fd, channelName);
+							JoinResponses(ch, fd, channelName);
 						}
 						else
 						{
-							ch = &(it->second); // channel already exists
-							bool alreadyJoined = false;// Check if user already joined
-							for(size_t i = 0; i < ch->_clients.size(); i++)
+							// if channel already exists
+							ch = &(it->second); 
+							bool alreadyJoined = false; // Check if user already joined
+							for(size_t k = 0; k < ch->_clients.size(); k++)
 							{
-								if (ch->_clients[i].getFd() == fd)
+								if (ch->_clients[k]->getFd() == fd)
 								{
 									polloutMessage(":ircserv 443 " + _clients[fd].getNick() + " " + channelName + " :is already on channel\r\n", fd);
 									alreadyJoined = true;
@@ -516,14 +595,13 @@ void Server::handleCommand(IRCmessage msg, int fd)
 										polloutMessage(":ircserv 475 " + _clients[fd].getNick() + " " + channelName + " :Cannot join channel (+k)\r\n", fd);
 										continue;
 									}
-									
 								}
-								if (ch->isInviteOnly) //preliminary
+								if (ch->isInviteOnly) 
 								{
-									bool invited = false;
+									bool invited = false; //check if client is invited
 									for (size_t j = 0; j < ch->_invited.size(); j++)
 									{
-										if (ch->_invited[j].getNick() == _clients[fd].getNick())
+										if (ch->_invited[j]->getNick() == _clients[fd].getNick())
 										{
 											ch->_invited.erase(ch->_invited.begin() + j);
 											invited = true;
@@ -537,10 +615,9 @@ void Server::handleCommand(IRCmessage msg, int fd)
 									}
 								}
 								// and other MODE
-								ch->_clients.push_back(_clients[fd]); //add client to channel client list
+								ch->_clients.push_back(&_clients[fd]); //add client to channel client list
 								_clients[fd]._channels.push_back(ch);
-								// send (with RPL_TOPIC (332) and optionally RPL_TOPICWHOTIME (333)), and no message if the channel does not have a topic.
-								JoinSendResponses(ch, fd, channelName);
+								JoinResponses(ch, fd, channelName);
 							}
 						}
 					}
@@ -549,28 +626,7 @@ void Server::handleCommand(IRCmessage msg, int fd)
 		}
 	}
 }
-				//// version 2
-				// // Construct JOIN message
-				// std::string prefix = ":" + _clients[fd].getNick() + "!" + _clients[fd].getUser() + "@ircserv ";
-				// std::string joinMsg = prefix + "JOIN :" + channelName + "\r\n";
-				// // Send JOIN message to all clients in the channel
-				// for (const Client& client : channel.clients)
-				// {
-				// 	polloutMessage(joinMsg, client.getFd());
-				// }
-				// // Send RPL_NAMREPLY and RPL_ENDOFNAMES only to the joining client
-				// std::string nameList;
-				// for (const Client& client : channel->_clients)
-				// {
-				// 	if (std::find(channel->_operators.begin(), channel->_operators.end(), client.getFd()) != channel->_operators.end())
-				// 		nameList += "@";
-				// 	nameList += client.getNick() + " ";
-				// }
-				// polloutMessage(":ircserv 366 " + _clients[fd].getNick() + " " + channelName + " :End of NAMES list\r\n", fd);
-				// polloutMessage(":ircserv 353 " + _clients[fd].getNick() + " = " + channelName + " :" + nameList + "\r\n", fd);
-			
 			// PRIVMSG for messaging
-
 			// somehow check is client operator of the channel??
 		/* for operators:
 		KICK - Eject a client from the channel
@@ -692,18 +748,18 @@ void Server::broadcastToClientsInSameChannels(std::string msg, Client sender)
 {
 	for (std::map<int, Client>::iterator cli = _clients.begin(); cli != _clients.end(); cli++)
 	{
-		for (std::vector<Channel *>::iterator ch = sender._channels.begin(); ch < sender._channels.end(); ch++)
+		for (std::vector<Channel*>::iterator ch = sender._channels.begin(); ch < sender._channels.end(); ch++)
 		{
-			std::vector<Client>::iterator reciever = (*ch)->_clients.begin();
+			std::vector<Client*>::iterator reciever = (*ch)->_clients.begin();
 			while (reciever < (*ch)->_clients.end())
 			{
-				if (cli->first == reciever->getFd())
+				if (cli->first == (*reciever)->getFd())
 					break;
 				reciever++;
 			}
 			if (reciever != (*ch)->_clients.end())
 			{
-				polloutMessage(msg, reciever->getFd());
+				polloutMessage(msg, (*reciever)->getFd());
 				break;
 			}
 		}

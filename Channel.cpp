@@ -11,9 +11,9 @@ bool Channel::isOperator(int clientFd)
 }
 bool Channel::isMember (int fd) const
 {
-	for (std::vector<Client>::const_iterator it = _clients.begin(); it != _clients.end(); ++it)
+	for (std::vector<Client*>::const_iterator it = _clients.begin(); it != _clients.end(); ++it)
 	{
-		if (it->getFd() == fd)
+		if ((*it)->getFd() == fd)
 			return true;
 	}
 	return false;
@@ -21,9 +21,9 @@ bool Channel::isMember (int fd) const
 
 void Channel::removeClient(int fd)
 {
-	for (std::vector<Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
+	for (std::vector<Client*>::iterator it = _clients.begin(); it != _clients.end(); ++it)
 	{
-		if (it->getFd() == fd)
+		if ((*it)->getFd() == fd)
 		{
 			_clients.erase(it);
 			break;
@@ -40,9 +40,9 @@ void Channel::removeClient(int fd)
 }
 void Channel::broadcast(const std::string& msg) const
 {
-	for (std::vector<Client>::const_iterator it = _clients.begin(); it != _clients.end(); ++it)
+	for (std::vector<Client*>::const_iterator it = _clients.begin(); it != _clients.end(); ++it)
 	{
-		int targetFd = it->getFd();
+		int targetFd = (*it)->getFd();
 		send(targetFd,msg.c_str(), msg.length(), 0);
 	}
 }

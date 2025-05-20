@@ -55,7 +55,9 @@ class Server
 			std::vector<std::string> key;
 		};
 		JOINmessage JoinParse(const std::string ch, const std::string key);
-		void JoinSendResponses(Channel* ch, int fd, const std::string& channelName);
+		void JoinResponses(Channel* ch, int fd, const std::string& channelName);
+		void TopicResponses(Channel* ch, int fd, const std::string& channelName);
+
 		void handleCommand(IRCmessage msg, int fd);
 		void acceptNewClient();		
 		void registerClient(int fd);
