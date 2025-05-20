@@ -6,7 +6,7 @@
 /*   By: psitkin <psitkin@student.hive.fi>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/19 20:18:03 by nvallin           #+#    #+#             */
-/*   Updated: 2025/05/08 23:19:20 by psitkin          ###   ########.fr       */
+/*   Updated: 2025/05/19 16:12:59 by pbumidan         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -57,7 +57,15 @@ class Server
 		JOINmessage JoinParse(const std::string ch, const std::string key);
 		void JoinResponses(Channel* ch, int fd, const std::string& channelName);
 		void TopicResponses(Channel* ch, int fd, const std::string& channelName);
-
+		std::vector<std::string> _Partlist;
+		std::vector<std::string> PartParse(const std::string &list);
+		struct MODEmessage
+		{
+			std::string add;
+			std::string remove;
+			std::vector<std::string> param;
+		};
+		MODEmessage ModeParse(const std::string args, const std::string param);
 		void handleCommand(IRCmessage msg, int fd);
 		void acceptNewClient();		
 		void registerClient(int fd);

@@ -3,6 +3,10 @@
 #include "Client.hpp"
 #include <bits/stdc++.h>
 
+#ifndef MAX_CHANNEL_USERS
+#define MAX_CHANNEL_USERS 65535
+#endif
+
 class Client;
 
 class Channel
@@ -27,6 +31,7 @@ class Channel
 		void removeClient(int fd);
 		void broadcast(const std::string& msg) const;
 
+		bool isLimitset;
 		void setLimit(size_t limit);
 		size_t getLimit();
 		bool isKeyProtected;
