@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Client.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: nvallin <nvallin@student.hive.fi>          +#+  +:+       +#+        */
+/*   By: psitkin <psitkin@student.hive.fi>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/19 20:18:36 by nvallin           #+#    #+#             */
-/*   Updated: 2025/04/19 20:33:40 by nvallin          ###   ########.fr       */
+/*   Updated: 2025/05/08 16:38:47 by psitkin          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -22,7 +22,7 @@ class Client
 {
 	public:
 		Client();
-		int getFd();
+		int getFd() const;
 		void setFd(int fd);
 		void setIpAdd(std::string ipadd);
 		std::string getNick();
@@ -38,7 +38,7 @@ class Client
 		void queueMessage(const std::string msg);
 		void sendData();
 		bool hasDataToSend();
-		std::vector<Channel> _channels;
+		std::vector<Channel *> _channels;
 		std::string _partialRecieve;		
 	private:
 		int _fd;

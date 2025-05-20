@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Client.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: nvallin <nvallin@student.hive.fi>          +#+  +:+       +#+        */
+/*   By: psitkin <psitkin@student.hive.fi>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/19 20:18:48 by nvallin           #+#    #+#             */
-/*   Updated: 2025/04/19 20:18:58 by nvallin          ###   ########.fr       */
+/*   Updated: 2025/05/08 16:39:23 by psitkin          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -20,7 +20,7 @@ Client::Client()
 	waitingToDisconnect = false;
 }
 
-int Client::getFd()
+int Client::getFd() const
 {
 	return (_fd);
 }

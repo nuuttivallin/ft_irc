@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Server.hpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: pbumidan <pbumidan@student.42.fr>          +#+  +:+       +#+        */
+/*   By: psitkin <psitkin@student.hive.fi>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/19 20:18:03 by nvallin           #+#    #+#             */
-/*   Updated: 2025/05/05 16:21:31 by pbumidan         ###   ########.fr       */
+/*   Updated: 2025/05/08 23:19:20 by psitkin          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -62,4 +62,6 @@ class Server
 		std::vector<std::string> splitLines(const std::string msg);
 		void polloutMessage(std::string msg, int fd);
 		void disconnectClient(int fd);
+		void handleKick(const IRCmessage& msg, int fd);
+		void broadcastToClientsInSameChannels(std::string msg, Client sender);
 };

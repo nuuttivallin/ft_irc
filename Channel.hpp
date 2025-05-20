@@ -22,6 +22,11 @@ class Channel
 		std::vector<int> _operators;
 		std::vector<Client> _invited;
 		bool isOperator(int clientFd);
+
+		bool isMember(int fd) const;
+		void removeClient(int fd);
+		void broadcast(const std::string& msg) const;
+
 		void setLimit(size_t limit);
 		size_t getLimit();
 		bool isKeyProtected;

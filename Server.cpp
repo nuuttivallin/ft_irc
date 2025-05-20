@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Server.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: pbumidan <pbumidan@student.42.fr>          +#+  +:+       +#+        */
+/*   By: psitkin <psitkin@student.hive.fi>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/19 20:18:18 by nvallin           #+#    #+#             */
-/*   Updated: 2025/05/05 17:55:15 by pbumidan         ###   ########.fr       */
+/*   Updated: 2025/05/08 23:19:10 by psitkin          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -360,25 +360,9 @@ void Server::handleCommand(IRCmessage msg, int fd)
 				if (it != _clients.end())
 					polloutMessage(":ircserv 433 " + msg.args[0] + " :Nickname is already in use\r\n", fd);
 				else
-				{			
-					for (std::map<int, Client>::iterator cli = _clients.begin(); cli != _clients.end(); cli++)
-					{
-						for (std::vector<Channel>::iterator ch = _clients[fd]._channels.begin(); ch < _clients[fd]._channels.end(); ch++)
-						{
-							std::vector<Client>::iterator reciever = ch->_clients.begin();
-							while (reciever < ch->_clients.end())
-							{
-								if (cli->second.getFd() == reciever->getFd())
-									break;
-								reciever++;
-							}
-							if (reciever != ch->_clients.end())
-							{
-								polloutMessage(":" + _clients[fd].getNick() + " NICK :" + msg.args[0] + "\r\n", reciever->getFd());
-								break;	
-							}
-						}
-					}
+				{	
+					std::string message = ":" + _clients[fd].getNick() + " NICK :" + msg.args[0] + "\r\n";
+					broadcastToClientsInSameChannels(message, _clients[fd]);
 					_clients[fd].setNick(msg.args[0]);
 				}
 			}
@@ -392,6 +376,8 @@ void Server::handleCommand(IRCmessage msg, int fd)
 			else
 				polloutMessage(":ircserv " + msg.args[0], fd);
 		}
+		if (msg.cmd == "KICK")
+			handleKick(msg, fd);
 		if (msg.cmd == "TOPIC")
 		{
 			if (msg.args.size() < 1)
@@ -493,7 +479,7 @@ void Server::handleCommand(IRCmessage msg, int fd)
 							}
 							else
 								newChannel.isKeyProtected = false;
-							_clients[fd]._channels.push_back(*ch);
+							_clients[fd]._channels.push_back(ch);
 							JoinSendResponses(ch, fd, channelName);
 						}
 						else
@@ -552,7 +538,7 @@ void Server::handleCommand(IRCmessage msg, int fd)
 								}
 								// and other MODE
 								ch->_clients.push_back(_clients[fd]); //add client to channel client list
-								_clients[fd]._channels.push_back(*ch);
+								_clients[fd]._channels.push_back(ch);
 								// send (with RPL_TOPIC (332) and optionally RPL_TOPICWHOTIME (333)), and no message if the channel does not have a topic.
 								JoinSendResponses(ch, fd, channelName);
 							}
@@ -639,6 +625,87 @@ void Server::polloutMessage(std::string msg, int fd)
 		{
 			_pfds[i].events |= POLLOUT;
 			break;
+		}
+	}
+}
+
+void Server::handleKick(const IRCmessage& msg, int fd)
+{
+	if (msg.args.size() < 2)
+	{
+		polloutMessage(":ircserv 461 " + _clients[fd].getNick() + " KICK :Not enough parameters\r\n", fd);
+		return;
+	}
+
+	std::string channelName = msg.args[0];
+	std::string targetNick = msg.args[1];
+
+	// chanel exist
+	if (_channels.find(channelName) == _channels.end())
+	{
+		polloutMessage(":ircserv 403 " + _clients[fd].getNick() + " " + channelName + " :No such channel\r\n", fd);
+		return;
+	}
+
+	Channel& channel = _channels[channelName];
+
+	// operator is valid
+	if (!channel.isOperator(fd))
+	{
+		polloutMessage(":ircserv 482 " + _clients[fd].getNick() + " " + channelName + " :You're not channel operator\r\n", fd);
+		return;
+	}
+
+	// finding user ID
+	int targetFd = -1;
+	for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
+	{
+		if (it->second.getNick() == targetNick)
+		{
+			targetFd = it->first;
+			break;
+		}
+	}
+
+	if (targetFd == -1)
+	{
+		polloutMessage(":ircserv 401 " + _clients[fd].getNick() + " " + targetNick + " :No such nick\r\n", fd);
+		return;
+	}
+
+	// Is user in channel
+	if (!channel.isMember(targetFd))
+	{
+		polloutMessage(":ircserv 441 " + targetNick + " " + channelName + " :They aren't on that channel\r\n", fd);
+		return;
+	}
+
+	std::string reason = (msg.args.size() >= 3) ? msg.args[2] : "Kicked";
+	std::string kickMsg = ":" + _clients[fd].getNick() + " KICK " + channelName + " " + targetNick + " :" + reason + "\r\n";
+
+	channel.broadcast(kickMsg);
+
+	channel.removeClient(targetFd);
+}
+
+void Server::broadcastToClientsInSameChannels(std::string msg, Client sender)
+{
+	for (std::map<int, Client>::iterator cli = _clients.begin(); cli != _clients.end(); cli++)
+	{
+		for (std::vector<Channel *>::iterator ch = sender._channels.begin(); ch < sender._channels.end(); ch++)
+		{
+			std::vector<Client>::iterator reciever = (*ch)->_clients.begin();
+			while (reciever < (*ch)->_clients.end())
+			{
+				if (cli->first == reciever->getFd())
+					break;
+				reciever++;
+			}
+			if (reciever != (*ch)->_clients.end())
+			{
+				polloutMessage(msg, reciever->getFd());
+				break;
+			}
 		}
 	}
 }
