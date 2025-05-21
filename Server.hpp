@@ -24,7 +24,7 @@
 #include <sstream>
 #include <map>
 #include "Channel.hpp"
-#include <bits/stdc++.h>
+//#include <bits/stdc++.h> // ON for Linux, OFF for mac
 
 class Client;
 class Channel;
