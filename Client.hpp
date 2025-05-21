@@ -15,6 +15,7 @@
 #include <queue>
 #include <sys/socket.h>
 #include "Channel.hpp"
+#include <map>
 
 class Channel;
 
@@ -38,7 +39,7 @@ class Client
 		void queueMessage(const std::string msg);
 		void sendData();
 		bool hasDataToSend();
-		std::vector<Channel *> _channels;
+		std::map<std::string, Channel *> _channels;
 		std::string _partialRecieve;		
 	private:
 		int _fd;

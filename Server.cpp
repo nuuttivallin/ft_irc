@@ -202,6 +202,8 @@ Server::IRCmessage Server::parse(const std::string input)
 		else
 			msg.args.push_back(word);
 	}
+	for (size_t i = 0; i < msg.cmd.size(); i++)
+		msg.cmd[i] = std::toupper(msg.cmd[i]);
 	return (msg);
 }
 
@@ -599,6 +601,7 @@ void Server::handleCommand(IRCmessage msg, int fd)
 							{
 								if ((*it)->getFd() == fd)
 								{
+									(*it)->_channels.erase(channelName);
 									ch->_clients.erase(it);
 									removed = true;
 									break;
@@ -792,11 +795,12 @@ void Server::handleCommand(IRCmessage msg, int fd)
 					Channel *ch = &(it->second);
 					bool removed = false;
 					std::string partMsg = ":" + _clients[fd].getNick() + "!~" + _clients[fd].getUser() +"@ircserv PART " + it->first + "\r\n";
-					for (std::vector<Client*>::iterator it = ch->_clients.begin(); it != ch->_clients.end(); ++it)
+					for (std::vector<Client*>::iterator cli = ch->_clients.begin(); cli != ch->_clients.end(); ++cli)
 					{
-						if ((*it)->getFd() == fd)
+						if ((*cli)->getFd() == fd)
 						{
-							ch->_clients.erase(it);
+							(*cli)->_channels.erase(it->first);
+							ch->_clients.erase(cli);
 							removed = true;
 							break;
 						}
@@ -865,7 +869,7 @@ void Server::handleCommand(IRCmessage msg, int fd)
 							}
 							else
 								newChannel.isKeyProtected = false;
-							_clients[fd]._channels.push_back(ch);
+							_clients[fd]._channels[channelName] = ch; // add channel to clients channel map
 							JoinResponses(ch, fd, channelName);
 						}
 						else
@@ -924,13 +928,22 @@ void Server::handleCommand(IRCmessage msg, int fd)
 								}
 								// and other MODE
 								ch->_clients.push_back(&_clients[fd]); //add client to channel client list
-								_clients[fd]._channels.push_back(ch);
+								_clients[fd]._channels[channelName] = ch; //add channel to clients channel map
 								JoinResponses(ch, fd, channelName);
 							}
 						}
 					}
 				}
 			}
+		}
+		if (msg.cmd == "QUIT")
+		{
+			std::string quitMsg = ":" + _clients[fd].getNick() + " QUIT :Quit: ";
+			if (!msg.args.empty())
+				quitMsg += msg.args[0];
+			quitMsg += "\r\n";
+			broadcastToClientsInSameChannels(quitMsg, _clients[fd]);
+			disconnectClient(fd);
 		}
 	}
 }
@@ -975,6 +988,11 @@ void Server::disconnectClient(int fd)
 	while (it != _pfds.end() && it->fd != fd)
 		it++;
 	std::cout << "Client " << fd << " disconnected\n";
+	for (std::map<std::string, Channel*>::iterator ch = _clients[fd]._channels.begin(); ch != _clients[fd]._channels.end(); ch++)
+	{
+		std::vector<Client *>::iterator cli = std::find(ch->second->_clients.begin(), ch->second->_clients.end(), &_clients[fd]);
+		ch->second->_clients.erase(cli);
+	}
 	_clients.erase(fd);					
 	close(fd);
 	_pfds.erase(it);
@@ -1056,18 +1074,11 @@ void Server::broadcastToClientsInSameChannels(std::string msg, Client sender)
 {
 	for (std::map<int, Client>::iterator cli = _clients.begin(); cli != _clients.end(); cli++)
 	{
-		for (std::vector<Channel*>::iterator ch = sender._channels.begin(); ch < sender._channels.end(); ch++)
+		for (std::map<std::string, Channel *>::iterator ch = sender._channels.begin(); ch != sender._channels.end(); ch++)
 		{
-			std::vector<Client*>::iterator reciever = (*ch)->_clients.begin();
-			while (reciever < (*ch)->_clients.end())
+			if (cli->second._channels.find(ch->first) != cli->second._channels.end())
 			{
-				if (cli->first == (*reciever)->getFd())
-					break;
-				reciever++;
-			}
-			if (reciever != (*ch)->_clients.end())
-			{
-				polloutMessage(msg, (*reciever)->getFd());
+				polloutMessage(msg, cli->second.getFd());
 				break;
 			}
 		}
