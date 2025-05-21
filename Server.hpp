@@ -6,7 +6,7 @@
 /*   By: psitkin <psitkin@student.hive.fi>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/19 20:18:03 by nvallin           #+#    #+#             */
-/*   Updated: 2025/05/19 16:12:59 by pbumidan         ###   ########.fr       */
+/*   Updated: 2025/05/21 21:27:56 by psitkin          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -24,7 +24,9 @@
 #include <sstream>
 #include <map>
 #include "Channel.hpp"
-//#include <bits/stdc++.h> // ON for Linux, OFF for mac
+#include <bits/stdc++.h> // ON for Linux, OFF for mac
+#include <algorithm>
+
 
 class Client;
 class Channel;

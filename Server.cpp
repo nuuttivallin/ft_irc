@@ -6,7 +6,7 @@
 /*   By: psitkin <psitkin@student.hive.fi>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/19 20:18:18 by nvallin           #+#    #+#             */
-/*   Updated: 2025/05/19 19:11:14 by pbumidan         ###   ########.fr       */
+/*   Updated: 2025/05/21 21:40:13 by psitkin          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -933,16 +933,13 @@ void Server::handleCommand(IRCmessage msg, int fd)
 			}
 		}
 		if (msg.cmd == "PRIVMSG") {
-			if (msg.cmd == "PRIVMSG"){
-    std::cout << "[DEBUG] GOT PRIVMSG → to: " << msg.args[0] << " | msg: " << msg.args[1] << "\n";
-    		}
 			if (msg.args.size() < 2)
 				{
     				polloutMessage(":ircserv 461 " + _clients[fd].getNick() + " PRIVMSG :Not enough parameters\r\n", fd);
     				return;
 				}
 			std::string recipient = msg.args[0];
-			std::string message = msg.args[1]; // без двоеточия в начале, ты уже обрезаешь это в parse()
+			std::string message = msg.args[1];
 			std::string fullMsg = ":" + _clients[fd].getNick() + "!~" + _clients[fd].getUser() + "@ircserv PRIVMSG " + recipient + " :" + message + "\r\n";
 
 			if (recipient[0] == '#' || recipient[0] == '&')
