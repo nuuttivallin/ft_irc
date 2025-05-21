@@ -1,4 +1,18 @@
 
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   Server.cpp                                         :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: pbumidan <pbumidan@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2025/04/19 20:18:18 by nvallin           #+#    #+#             */
+/*   Updated: 2025/05/22 00:27:59 by pbumidan         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+
+
 #include "Server.hpp"
 
 Server::Server(std::string port, std::string pass)
@@ -323,21 +337,30 @@ Server::MODEmessage Server::ModeParse(const std::string modes, const std::string
         } else if (c == '-') {
             adding = false;
         } else {
-            if (adding) {
+            if (adding) 
+			{
                 result.add += c;
-                if (c == 'k' || c == 'l') {
-                    if (paramIndex < paramList.size())
-                        result.param.push_back(paramList[paramIndex++]);
-                    else
-                        break; // Not enough parameters
-                }
-            } else {
+                if (c == 'k' || c == 'l' || c == 'o') 
+				{
+					if (paramIndex < paramList.size())
+						result.param.push_back(paramList[paramIndex++]);
+					else
+						break;
+				}
+            } 
+			else 
+			{
                 result.remove += c;
-                // no param needed when removing +k or +l
+				if (c == 'o')
+				{
+					if (paramIndex < paramList.size())
+						result.param.push_back(paramList[paramIndex++]);
+					else
+						break;
+				}
             }
         }
     }
-
     return result;
 }
 
@@ -591,7 +614,7 @@ void Server::handleCommand(IRCmessage msg, int fd)
 									if (ch->_clients[k]->getFd() != fd)
 										polloutMessage(partMsg, ch->_clients[k]->getFd());
 								}
-								polloutMessage(partMsg, fd); // Send to self after
+								polloutMessage(partMsg, fd);
 							}
 						}
 					}
@@ -638,7 +661,6 @@ void Server::handleCommand(IRCmessage msg, int fd)
 							modes += "t";
 						if (ch->isKeyProtected)
 							modes += "k";
-						if (ch->isLimitset)
 							modes += "l";
 						if (notOnChannel == true)
 							polloutMessage(":ircserv 324 " + _clients[fd].getNick() + " " + msg.args[0] + " +" + modes + "\r\n", fd);
@@ -680,7 +702,12 @@ void Server::handleCommand(IRCmessage msg, int fd)
 								size_t requiredParams = 0;
 								for (size_t i = 0; i < modeargs.add.size(); ++i)
 								{
-									if (modeargs.add[i] == 'k' || modeargs.add[i] == 'l' )
+									if (modeargs.add[i] == 'k' || modeargs.add[i] == 'l' || modeargs.add[i] == 'o')
+										requiredParams++;
+								}
+								for (size_t i = 0; i < modeargs.remove.size(); ++i)
+								{
+									if (modeargs.remove[i] == 'o')
 										requiredParams++;
 								}
 								if (modeargs.param.size() < requiredParams)
@@ -711,7 +738,30 @@ void Server::handleCommand(IRCmessage msg, int fd)
 										}
 										ch->setLimit(limit);
 										ch->isLimitset = true;
-									} 
+									}
+									else if (c == 'o')
+									{
+										const std::string targetNick = modeargs.param[paramIdx];
+										paramIdx++;                                             
+									
+										bool found = false;
+										for (size_t k = 0; k < ch->_clients.size(); ++k)
+										{
+											if (ch->_clients[k]->getNick() == targetNick)
+											{
+												if (std::find(ch->_operators.begin(), ch->_operators.end(),
+															  ch->_clients[k]->getFd()) == ch->_operators.end())
+													ch->_operators.push_back(ch->_clients[k]->getFd());
+												found = true;
+												break;
+											}
+										}
+										if (!found)
+										{
+											polloutMessage(":ircserv 441 " + _clients[fd].getNick() + " " + targetNick + " " + msg.args[0] + " :They aren't on this channel\r\n", fd);
+											return;
+										}
+									}
 									else 
 									{
 										polloutMessage(":ircserv 472 " + _clients[fd].getNick() + " " + msg.args[0] + " :is unknown mode char to me\r\n", fd);	
@@ -734,6 +784,29 @@ void Server::handleCommand(IRCmessage msg, int fd)
 									{
 										ch->setLimit(MAX_CHANNEL_USERS);
 										ch->isLimitset = false;
+									}
+									else if (c == 'o')
+									{
+										const std::string targetNick = modeargs.param[paramIdx];
+										paramIdx++;
+										bool found = false;
+										for (size_t k = 0; k < ch->_clients.size(); ++k)
+										{
+											if (ch->_clients[k]->getNick() == targetNick)
+											{
+												int targetFd = ch->_clients[k]->getFd();
+												std::vector<int>::iterator it = std::find(ch->_operators.begin(), ch->_operators.end(), targetFd);
+												if (it != ch->_operators.end())
+													ch->_operators.erase(it);
+												found = true;
+												break;
+											}
+										}
+										if (!found)
+										{
+											polloutMessage(":ircserv 441 " + _clients[fd].getNick() + " " + targetNick + " " + msg.args[0] + " :They aren't on this channel\r\n", fd);
+											return;
+										}
 									}
 									else 
 									{
