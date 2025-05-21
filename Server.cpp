@@ -933,6 +933,46 @@ void Server::handleCommand(IRCmessage msg, int fd)
 			broadcastToClientsInSameChannels(quitMsg, _clients[fd]);
 			disconnectClient(fd);
 		}
+		if (msg.cmd == "INVITE")
+		{
+			if (msg.args.size() < 2)
+			{
+				polloutMessage(":ircserv 461 * " + msg.cmd + " :Not enough parameters\r\n", fd);
+				return;
+			}
+			for (std::map<int, Client>::iterator cli = _clients.begin(); cli != _clients.end(); cli++)
+			{
+				if (cli->second.getNick() == msg.args[0])
+				{
+					std::map<std::string, Channel>::iterator ch = _channels.find(msg.args[1]);
+					if (ch == _channels.end())
+					{
+						polloutMessage(":ircserv 403 * " + msg.args[1] + " :No such channel\r\n", fd);
+						return;
+					}
+					if (_clients[fd]._channels.find(msg.args[1]) == _clients[fd]._channels.end())
+					{
+						polloutMessage(":ircserv 442 * " + msg.args[1] + " :You're not on that channel\r\n", fd);
+						return;
+					}
+					if (ch->second.isInviteOnly && !ch->second.isOperator(fd))
+					{
+						polloutMessage(":ircserv 482 * " + msg.args[1] + " :You're not channel operator\r\n", fd);
+						return;
+					}
+					if (cli->second._channels.find(msg.args[1]) != cli->second._channels.end())
+					{
+						polloutMessage(":ircserv 432 * " + msg.args[0] + " " + msg.args[1] + " :is already on channel\r\n", fd);
+						return;						
+					}
+					ch->second._invited.push_back(&cli->second);
+					polloutMessage(":ircserv 341 * " + msg.args[0] + " " + msg.args[1] + "\r\n", fd);
+					polloutMessage(":" + _clients[fd].getNick() + "!" + _clients[fd].getUser() + "@ircserv INVITE " + msg.args[0] + " :" + msg.args[1] + "\r\n", cli->first);
+					return;
+				}
+			}
+			polloutMessage(":ircserv 401 * " + msg.args[0] + " :No such nick\r\n", fd);
+		}
 	}
 }
 			// PRIVMSG for messaging
