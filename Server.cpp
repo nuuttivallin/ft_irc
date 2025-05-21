@@ -3,10 +3,10 @@
 /*                                                        :::      ::::::::   */
 /*   Server.cpp                                         :+:      :+:    :+:   */
 /*                                                    +:+ +:+         +:+     */
-/*   By: psitkin <psitkin@student.hive.fi>          +#+  +:+       +#+        */
+/*   By: pbumidan <pbumidan@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2025/04/19 20:18:18 by nvallin           #+#    #+#             */
-/*   Updated: 2025/05/19 19:11:14 by pbumidan         ###   ########.fr       */
+/*   Updated: 2025/05/21 17:33:36 by pbumidan         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -275,23 +275,6 @@ void Server::TopicResponses(Channel* ch, int fd, const std::string& channelName)
 	if (!setBy.empty() && !setAt.empty()) {
 		polloutMessage(":ircserv 333 " + nick + " " + channelName + " " + setBy + " " + setAt + "\r\n", fd);
 	}
-	// if (ch->getTopic("topic").empty())
-	// {
-	// 	//RPL_NOTOPIC 331
-	// 	polloutMessage(":ircserv 331 " + _clients[fd].getNick() + " " + channelName + " :No topic is set\r\n", fd);
-	// 	return;
-	// }
-	// else
-	// {
-	// 	//RPL_TOPIC 332
-	// 	polloutMessage(":ircserv 332 " + _clients[fd].getNick() + " " + channelName + " :" + ch->getTopic("topic") + "\r\n", fd);
-	// }
-	// if (!ch->getTopic("setBy").empty() && !ch->getTopic("setAt").empty())
-	// {
-	// 	//RPL_TOPICWHOTIME 333
-	// 	std::string topicWhoTime = ":ircserv 333 " + _clients[fd].getNick() + " " + channelName + " " + ch->getTopic("setBy") + " " + ch->getTopic("setAt") + "\r\n";
-	// 	polloutMessage(topicWhoTime, fd);
-	// }
 }
 
 void Server::JoinResponses(Channel* ch, int fd, const std::string& channelName)
@@ -713,38 +696,32 @@ void Server::handleCommand(IRCmessage msg, int fd)
 									polloutMessage(":ircserv 461 " + _clients[fd].getNick() + " " + msg.cmd + " :Not enough parameters\r\n", fd);
 									return;
 								}
-								//TO DO::: for everymode change, broadcast to all clients:
 								size_t paramIdx = 0;
 								for (size_t i = 0; i < modeargs.add.size(); ++i)
 								{
 									char c = modeargs.add[i];
-									if (c == 'i')
-									{
+									if (c == 'i') 
 										ch->isInviteOnly = true;
-										polloutMessage(":ircserv 221 " + _clients[fd].getNick() + " " + msg.args[0] + " :+i\r\n", fd);
-									} 
-									else if (c == 't') {
+									else if (c == 't')
 										ch->isTopicProtected = true;
-										polloutMessage(":ircserv 221 " + _clients[fd].getNick() + " " + msg.args[0] + " :+t\r\n", fd);
-									} 
-									else if (c == 'k') {
+									else if (c == 'k')
+									{
 										ch->setKey(modeargs.param[paramIdx++]);
 										ch->isKeyProtected = true;
-										polloutMessage(":ircserv 221 " + _clients[fd].getNick() + " " + msg.args[0] + " :+k\r\n", fd);
-									} 
-									else if (c == 'l') 
+									}
+									else if (c == 'l')
 									{
 										int limit = std::atol(modeargs.param[paramIdx++].c_str());
-										if (limit > MAX_CHANNEL_USERS || limit < 0)
+										if (limit > MAX_CHANNEL_USERS || limit <= 0)
 										{
 											polloutMessage(":ircserv 461 " + _clients[fd].getNick() + " " + msg.args[0] + " :Invalid limit parameter\r\n", fd);	
 											return;
 										}
 										ch->setLimit(limit);
 										ch->isLimitset = true;
-										polloutMessage(":ircserv 221 " + _clients[fd].getNick() + " " + msg.args[0] + " :+l\r\n", fd);
 									} 
-									else {
+									else 
+									{
 										polloutMessage(":ircserv 472 " + _clients[fd].getNick() + " " + msg.args[0] + " :is unknown mode char to me\r\n", fd);	
 										return;
 									}
@@ -752,25 +729,36 @@ void Server::handleCommand(IRCmessage msg, int fd)
 								for (size_t i = 0; i < modeargs.remove.size(); ++i) 
 								{
 									char c = modeargs.remove[i];
-									if (c == 'i') {
+									if (c == 'i') 
 										ch->isInviteOnly = false;
-										polloutMessage(":ircserv 221 " + _clients[fd].getNick() + " " + msg.args[0] + " :-i\r\n", fd);
-									} else if (c == 't') {
+									else if (c == 't')
 										ch->isTopicProtected = false;
-										polloutMessage(":ircserv 221 " + _clients[fd].getNick() + " " + msg.args[0] + " :-t\r\n", fd);
-									} else if (c == 'k') {
+									else if (c == 'k')
+									{
 										ch->setKey("");
 										ch->isKeyProtected = false;
-										polloutMessage(":ircserv 221 " + _clients[fd].getNick() + " " + msg.args[0] + " :-k\r\n", fd);
-									} else if (c == 'l') {
+									}
+									else if (c == 'l')
+									{
 										ch->setLimit(MAX_CHANNEL_USERS);
 										ch->isLimitset = false;
-										polloutMessage(":ircserv 221 " + _clients[fd].getNick() + " " + msg.args[0] + " :-l\r\n", fd);
-									} else {
+									}
+									else 
+									{
 										polloutMessage(":ircserv 472 " + _clients[fd].getNick() + " " + msg.args[0] + " :is unknown mode char to me\r\n", fd);	
 										return;
 									}
 								}
+								std::string MODEmsg = ":" + _clients[fd].getNick() + "!~" + _clients[fd].getUser() + "@ircserv MODE " + msg.args[0] + " ";
+								if (!modeargs.add.empty())
+									MODEmsg += "+" + std::string(modeargs.add.begin(), modeargs.add.end());
+								if (!modeargs.remove.empty())
+									MODEmsg += "-" + std::string(modeargs.remove.begin(), modeargs.remove.end());
+								for (size_t q = 0; q < paramIdx; ++q)
+									MODEmsg += " " + modeargs.param[q];
+								MODEmsg += "\r\n";
+								for (size_t k = 0; k < ch->_clients.size(); ++k)
+									polloutMessage(MODEmsg, ch->_clients[k]->getFd());
 							}
 						}
 					}
