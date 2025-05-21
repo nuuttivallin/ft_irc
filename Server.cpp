@@ -1,14 +1,3 @@
-/* ************************************************************************** */
-/*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   Server.cpp                                         :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: pbumidan <pbumidan@student.42.fr>          +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2025/04/19 20:18:18 by nvallin           #+#    #+#             */
-/*   Updated: 2025/05/21 17:33:36 by pbumidan         ###   ########.fr       */
-/*                                                                            */
-/* ************************************************************************** */
 
 #include "Server.hpp"
 
@@ -924,6 +913,56 @@ void Server::handleCommand(IRCmessage msg, int fd)
 				}
 			}
 		}
+		if (msg.cmd == "PRIVMSG") {
+			if (msg.args.size() < 2)
+				{
+    				polloutMessage(":ircserv 461 " + _clients[fd].getNick() + " PRIVMSG :Not enough parameters\r\n", fd);
+    				return;
+				}
+			std::string recipient = msg.args[0];
+			std::string message = msg.args[1];
+			std::string fullMsg = ":" + _clients[fd].getNick() + "!~" + _clients[fd].getUser() + "@ircserv PRIVMSG " + recipient + " :" + message + "\r\n";
+
+			if (recipient[0] == '#' || recipient[0] == '&')
+			{
+				if(_channels.find(recipient) == _channels.end())
+				{
+					polloutMessage(":ircserv 403 " + _clients[fd].getNick() + " " + recipient + " :No such channel\r\n", fd);
+					return;
+				}
+				Channel& channel = _channels[recipient];
+
+				if(!channel.isMember(fd))
+				{
+					polloutMessage(":ircserv 404 " + _clients[fd].getNick() + " " + recipient + " :Cannot send to channel\r\n", fd);
+					return;
+				}
+
+				for (std::vector<Client*>::iterator it = channel._clients.begin(); it != channel._clients.end(); ++it)
+				{
+					if ((*it)->getFd() != fd)
+						polloutMessage (fullMsg, (*it)->getFd());
+				}
+				return;
+			}
+
+			bool found = false;
+			for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
+			{
+				if(it->second.getNick() == recipient)
+				{
+					polloutMessage(fullMsg, it->first);
+					found = true;
+					break;
+				}
+			}
+			if(!found)
+			{
+				polloutMessage (":ircserv 401 " + _clients[fd].getNick() + " " + recipient + " :No such nick\r\n", fd);
+			}
+		}
+	}	
+
 		if (msg.cmd == "QUIT")
 		{
 			std::string quitMsg = ":" + _clients[fd].getNick() + " QUIT :Quit: ";
@@ -974,7 +1013,6 @@ void Server::handleCommand(IRCmessage msg, int fd)
 			polloutMessage(":ircserv 401 * " + msg.args[0] + " :No such nick\r\n", fd);
 		}
 	}
-}
 			// PRIVMSG for messaging
 			// somehow check is client operator of the channel??
 		/* for operators:
