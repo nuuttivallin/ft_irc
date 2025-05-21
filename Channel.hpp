@@ -1,7 +1,7 @@
 #pragma once
 #include <vector>
 #include "Client.hpp"
-#include <bits/stdc++.h>
+//#include <bits/stdc++.h>  // ON for Linux, OFF for mac
 
 #ifndef MAX_CHANNEL_USERS
 #define MAX_CHANNEL_USERS 65535
