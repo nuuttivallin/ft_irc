@@ -74,6 +74,17 @@ class Server
 		std::vector<std::string> splitLines(const std::string msg);
 		void polloutMessage(std::string msg, int fd);
 		void disconnectClient(int fd);
+		void handleCap(const IRCmessage& msg, int fd);
 		void handleKick(const IRCmessage& msg, int fd);
+		void handleNick(const IRCmessage& msg, int fd);
+		void handleUser(const IRCmessage& msg, int fd);
+		void handlePass(const IRCmessage& msg, int fd);
+		void handleTopic(const IRCmessage& msg, int fd);
+		void handlePart(const IRCmessage& msg, int fd);
+		void handleMode(const IRCmessage& msg, int fd);
+		void handleJoin(const IRCmessage& msg, int fd);
+		void handlePrivmsg(const IRCmessage& msg, int fd);
+		void handleInvite(const IRCmessage& msg, int fd);
 		void broadcastToClientsInSameChannels(std::string msg, Client sender);
+		void broadcastToChannel(std::string msg, Channel channel);
 };
