@@ -661,6 +661,7 @@ void Server::handleCommand(IRCmessage msg, int fd)
 							modes += "t";
 						if (ch->isKeyProtected)
 							modes += "k";
+						if (ch->isLimitset)
 							modes += "l";
 						if (notOnChannel == true)
 							polloutMessage(":ircserv 324 " + _clients[fd].getNick() + " " + msg.args[0] + " +" + modes + "\r\n", fd);
@@ -1018,7 +1019,6 @@ void Server::handleCommand(IRCmessage msg, int fd)
 				}
 				return;
 			}
-
 			bool found = false;
 			for (std::map<int, Client>::iterator it = _clients.begin(); it != _clients.end(); ++it)
 			{
@@ -1034,8 +1034,6 @@ void Server::handleCommand(IRCmessage msg, int fd)
 				polloutMessage (":ircserv 401 " + _clients[fd].getNick() + " " + recipient + " :No such nick\r\n", fd);
 			}
 		}
-	}	
-
 		if (msg.cmd == "QUIT")
 		{
 			std::string quitMsg = ":" + _clients[fd].getNick() + " QUIT :Quit: ";
@@ -1086,6 +1084,7 @@ void Server::handleCommand(IRCmessage msg, int fd)
 			polloutMessage(":ircserv 401 * " + msg.args[0] + " :No such nick\r\n", fd);
 		}
 	}
+}
 			// PRIVMSG for messaging
 			// somehow check is client operator of the channel??
 		/* for operators:
