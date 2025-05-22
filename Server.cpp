@@ -448,9 +448,9 @@ void Server::handlePass(const IRCmessage& msg, int fd)
 void Server::handleTopic(const IRCmessage& msg, int fd)
 {
 	if (msg.args.size() < 1)
-		polloutMessage(":ircserv 461 * " + msg.cmd + " :Not enough parameters\r\n", fd);
+		polloutMessage(":ircserv 461 " + _clients[fd].getNick() + " " + msg.cmd + " :Not enough parameters\r\n", fd);
 	else if (msg.args.size() > 2)
-		polloutMessage(":ircserv 461 * " + msg.cmd + " :Too many parameters\r\n", fd);
+		polloutMessage(":ircserv 461 " + _clients[fd].getNick() + " " + msg.cmd + " :Too many parameters\r\n", fd);
 	else
 	{
 		std::map<std::string, Channel>::iterator it = _channels.find(msg.args[0]);
@@ -498,9 +498,9 @@ void Server::handleTopic(const IRCmessage& msg, int fd)
 void Server::handlePart(const IRCmessage& msg, int fd)
 {
 	if (msg.args.empty())
-		polloutMessage(":ircserv 461 * " + msg.cmd + " :Not enough parameters\r\n", fd);
+		polloutMessage(":ircserv 461 " + _clients[fd].getNick() + " " + msg.cmd + " :Not enough parameters\r\n", fd);
 	else if (msg.args.size() > 2)
-		polloutMessage(":ircserv 461 * " + msg.cmd + " :Too many parameters\r\n", fd);
+		polloutMessage(":ircserv 461 " + _clients[fd].getNick() + " " + msg.cmd + " :Too many parameters\r\n", fd);
 	else
 	{
 		std::vector<std::string> partmsg;
@@ -508,10 +508,8 @@ void Server::handlePart(const IRCmessage& msg, int fd)
 		std::string reason;
 		if (msg.args.size() == 2)
 			reason = msg.args[1];
-		std::cout << "CHECK: partmessage.channel.size(): " << partmsg.size() << std::endl; //printcheck delete later
 		for (size_t i = 0; i < partmsg.size(); ++i)
 		{
-			std::cout << "CHECK: channel: " << partmsg[i] << std::endl; //printcheck, delete later
 			if (partmsg[i].empty() || (partmsg[i][0] != '#' && partmsg[i][0] != '&'))
 			{
 				polloutMessage(":ircserv 403 " + _clients[fd].getNick() + " " + partmsg[i] + " :No such channel\r\n", fd);
@@ -578,9 +576,9 @@ void Server::handlePart(const IRCmessage& msg, int fd)
 void Server::handleMode(const IRCmessage& msg, int fd)
 {
 	if (msg.args.size() < 1)
-		polloutMessage(":ircserv 461 * " + msg.cmd + " :Not enough parameters\r\n", fd);
+		polloutMessage(":ircserv 461 " + _clients[fd].getNick() + " " + msg.cmd + " :Not enough parameters\r\n", fd);
 	else if (msg.args.size() > 3)
-		polloutMessage(":ircserv 461 * " + msg.cmd + " :Too many parameters\r\n", fd);
+		polloutMessage(":ircserv 461 "  + _clients[fd].getNick() + " " + msg.cmd + " :Too many parameters\r\n", fd);
 	else if (_channels.find(msg.args[0]) == _channels.end())
 		polloutMessage(":ircserv 403 " + _clients[fd].getNick() + " " + msg.args[0] + " :No such channel\r\n", fd);
 	else
@@ -767,7 +765,7 @@ void Server::handleMode(const IRCmessage& msg, int fd)
 void Server::handleJoin(const IRCmessage& msg, int fd)
 {
 	if (msg.args.empty())
-		polloutMessage(":ircserv 461 * " + msg.cmd + " :Not enough parameters\r\n", fd); // i use this for now
+		polloutMessage(":ircserv 461 " + _clients[fd].getNick() + " " + msg.cmd + " :Not enough parameters\r\n", fd);
 	else if (msg.args.size() == 1 && msg.args[0] == "0")
 	{
 		std::map<std::string, Channel>::iterator it;
@@ -796,12 +794,12 @@ void Server::handleJoin(const IRCmessage& msg, int fd)
 					if (ch->_clients[k]->getFd() != fd)
 						polloutMessage(partMsg, ch->_clients[k]->getFd());
 				}
-				polloutMessage(partMsg, fd); // Send to self after
+				polloutMessage(partMsg, fd);
 			}
 		}
 	}
 	else if (msg.args.size() > 2)
-		polloutMessage(":ircserv 461 * " + msg.cmd + " :Too many parameters\r\n", fd);
+		polloutMessage(":ircserv 461 "  + _clients[fd].getNick() + " " + msg.cmd + " :Too many parameters\r\n", fd);
 	else
 	{
 		JOINmessage joinmsg;
@@ -905,7 +903,6 @@ void Server::handleJoin(const IRCmessage& msg, int fd)
 								continue;
 							}
 						}
-						// and other MODE
 						ch->_clients.push_back(&_clients[fd]);	  // add client to channel client list
 						_clients[fd]._channels[channelName] = ch; // add channel to clients channel map
 						JoinResponses(ch, fd, channelName);
