@@ -75,7 +75,7 @@ bool Client::hasDataToSend()
     return (!_sendQueue.empty() || !_partialSend.empty());
 }
 
-void Client::sendData()
+long Client::sendData()
 {
 	std::string msg;
 	if (hasDataToSend())
@@ -87,11 +87,14 @@ void Client::sendData()
 		}
 		else
 			msg = _partialSend;
-		size_t bytesSent = send(_fd, msg.c_str(), msg.size(), 0);
-		//add check for -1 return
-		if (bytesSent < msg.size())
+		long bytesSent = send(_fd, msg.c_str(), msg.size(), 0);
+		if (bytesSent == -1)
+			return (-1);
+		if (bytesSent < (long)msg.size())
 			_partialSend = msg.substr(bytesSent);
 		else
 			_partialSend.clear();
+		return (bytesSent);
 	}
+	return (0);
 }

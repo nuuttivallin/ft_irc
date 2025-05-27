@@ -37,7 +37,7 @@ class Client
 		bool correctPassword;
 		bool waitingToDisconnect;
 		void queueMessage(const std::string msg);
-		void sendData();
+		long sendData();
 		bool hasDataToSend();
 		std::map<std::string, Channel *> _channels;
 		std::string _partialRecieve;		

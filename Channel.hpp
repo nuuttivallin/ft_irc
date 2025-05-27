@@ -29,7 +29,6 @@ class Channel
 
 		bool isMember(int fd) const;
 		void removeClient(int fd);
-		void broadcast(const std::string& msg) const;
 
 		bool isLimitset;
 		void setLimit(size_t limit);

@@ -38,14 +38,6 @@ void Channel::removeClient(int fd)
 		}
 	}
 }
-void Channel::broadcast(const std::string& msg) const
-{
-	for (std::vector<Client*>::const_iterator it = _clients.begin(); it != _clients.end(); ++it)
-	{
-		int targetFd = (*it)->getFd();
-		send(targetFd,msg.c_str(), msg.length(), 0);
-	}
-}
 
 void Channel::setLimit(size_t limit)
 {

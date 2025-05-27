@@ -72,15 +72,15 @@ void Server::startServer()
 
 	_fd = socket(AF_INET, SOCK_STREAM, 0);
 	if (_fd == -1)
-		throw (std::runtime_error("socket"));
+		throw (std::runtime_error("socket failed"));
 	if (setsockopt(_fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) == -1)
-		throw (std::runtime_error("SO_REUSEADDR"));
+		throw (std::runtime_error("error setting socket to SO_REUSEADDR"));
 	if (fcntl(_fd, F_SETFL, O_NONBLOCK) == -1)
-		throw (std::runtime_error("O_NONBLOCK"));
+		throw (std::runtime_error("error setting socket to O_NONBLOCK"));
 	if (bind(_fd, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) == -1)
-		throw (std::runtime_error("bind"));
+		throw (std::runtime_error("bind error"));
 	if (listen(_fd, 5) == -1)
-		throw (std::runtime_error("listen"));
+		throw (std::runtime_error("listen error"));
 
 	std::cout << "Server listening on port " << _port << "\n";
 
@@ -92,8 +92,13 @@ void Server::startServer()
 
 	while (!quit)
 	{
-		if (poll(&_pfds[0], _pfds.size(), -1) == -1)
-			throw (std::runtime_error("poll"));
+		if (poll(&_pfds[0], _pfds.size(), -1) == -1 && !quit)
+		{
+			std::cerr << "poll error\n";
+			quit = true;
+		}
+		if (quit)
+			break;
 		for (size_t i = 0; i < _pfds.size(); i++)
 		{
 			if (_pfds[i].revents & POLLIN)
@@ -133,7 +138,12 @@ void Server::startServer()
 			}
 			if (_pfds[i].revents & POLLOUT)
 			{
-				_clients[_pfds[i].fd].sendData();
+				if (_clients[_pfds[i].fd].sendData() == -1)
+				{
+					std::cerr << "send failed\n";
+					quit = true;
+					break;
+				}
 				if (!_clients[_pfds[i].fd].hasDataToSend())
 				{
 					_pfds[i].revents &= ~POLLOUT;
@@ -390,7 +400,8 @@ void Server::handleNick(const IRCmessage& msg, int fd)
 	if (msg.args.size() < 1)
 		polloutMessage(":ircserv 431 * :No nickname given\r\n", fd);
 	else if (msg.args[0][0] == '#' || msg.args[0][0] == ':' || \
-			(msg.args[0][0] == '&' && msg.args[0][0] == '#') || msg.args.size() > 1)
+			msg.args[0][0] == '&' || msg.args[0][0] == '@' || \
+			msg.args.size() > 1 || msg.args[0].find(' ') != msg.args[0].npos)
 		polloutMessage(":ircserv 432 " + msg.args[0] + " :Erroneus nickname\r\n", fd);
 	else
 	{
@@ -405,11 +416,10 @@ void Server::handleNick(const IRCmessage& msg, int fd)
 			polloutMessage(":ircserv 433 " + msg.args[0] + " :Nickname is already in use\r\n", fd);
 		else
 		{
+			std::string message = ":" + _clients[fd].getNick() + " NICK :" + msg.args[0] + "\r\n";			
 			if (_clients[fd].isRegistered && !_clients[fd]._channels.empty())
-			{
-				std::string message = ":" + _clients[fd].getNick() + " NICK :" + msg.args[0] + "\r\n";
 				broadcastToClientsInSameChannels(message, _clients[fd]);
-			}
+			polloutMessage(message, fd);
 			_clients[fd].setNick(msg.args[0]);
 		}
 	}
@@ -566,6 +576,8 @@ void Server::handlePart(const IRCmessage& msg, int fd)
 								polloutMessage(partMsg, ch->_clients[k]->getFd());
 						}
 						polloutMessage(partMsg, fd);
+						if (ch->_clients.empty())
+							_channels.erase(it->first);
 					}
 				}
 			}
@@ -772,6 +784,7 @@ void Server::handleJoin(const IRCmessage& msg, int fd)
 		for (it = _channels.begin(); it != _channels.end(); it++)
 		{
 			Channel *ch = &(it->second);
+			std::string channelName = it->first;
 			bool removed = false;
 			std::string partMsg = ":" + _clients[fd].getNick() + "!~" + _clients[fd].getUser() + "@ircserv PART " + it->first + "\r\n";
 			for (std::vector<Client *>::iterator cli = ch->_clients.begin(); cli != ch->_clients.end(); ++cli)
@@ -795,6 +808,8 @@ void Server::handleJoin(const IRCmessage& msg, int fd)
 						polloutMessage(partMsg, ch->_clients[k]->getFd());
 				}
 				polloutMessage(partMsg, fd);
+				if (ch->_clients.empty())
+					_channels.erase(channelName);
 			}
 		}
 	}
@@ -1047,6 +1062,7 @@ void Server::handleCommand(IRCmessage msg, int fd)
 				quitMsg += msg.args[0];
 			quitMsg += "\r\n";
 			broadcastToClientsInSameChannels(quitMsg, _clients[fd]);
+			polloutMessage(quitMsg, fd);
 			disconnectClient(fd);
 		}
 		if (msg.cmd == "INVITE")
@@ -1087,6 +1103,8 @@ void Server::disconnectClient(int fd)
 		std::vector<int>::iterator oper = std::find(ch->second->_operators.begin(), ch->second->_operators.end(), fd);
 		if (oper != ch->second->_operators.end())
 			ch->second->_operators.erase(oper);
+		if (ch->second->_clients.empty())
+			_channels.erase(ch->first);
 	}
 	_clients.erase(fd);					
 	close(fd);
@@ -1171,6 +1189,8 @@ void Server::broadcastToClientsInSameChannels(std::string msg, Client sender)
 	{
 		for (std::map<std::string, Channel *>::iterator ch = sender._channels.begin(); ch != sender._channels.end(); ch++)
 		{
+			if (cli->second.getFd() == sender.getFd())
+				break;
 			if (cli->second._channels.find(ch->first) != cli->second._channels.end())
 			{
 				polloutMessage(msg, cli->second.getFd());
