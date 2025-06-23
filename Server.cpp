@@ -1041,7 +1041,7 @@ void Server::handleCommand(IRCmessage msg, int fd)
 			if (msg.args.size() < 1)
 				polloutMessage(":ircserv 461 * " + msg.cmd + " :Not enough parameters\r\n", fd);
 			else
-				polloutMessage(":ircserv " + msg.args[0], fd);
+				polloutMessage(":ircserv PONG :" + msg.args[0] + "\r\n", fd);
 		}
 		else if (msg.cmd == "KICK")
 			handleKick(msg, fd);
