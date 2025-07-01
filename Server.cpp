@@ -11,8 +11,6 @@
 /*                                                                            */
 /* ************************************************************************** */
 
-
-
 #include "Server.hpp"
 
 Server::Server(std::string port, std::string pass)
@@ -56,7 +54,7 @@ void Server::acceptNewClient()
 	ncli.second = newClient;
 	_clients.insert(ncli);
 
-	std::cout << "Client " << newClient.getFd() << " connected\n";
+	std::cout << "Client connected on fd " << newClient.getFd() << "\n";
 }
 
 void Server::startServer()
@@ -124,13 +122,6 @@ void Server::startServer()
 							_clients[_pfds[i].fd]._partialRecieve.erase(0, pos + 2);
 							IRCmessage msg = parse(line);
 							handleCommand(msg, _pfds[i].fd);
-
-							// printing message just for debugging atm					
-							std::cout << "prefix: " << msg.prefix << " cmd: " << msg.cmd << std::endl;
-							for (std::vector<std::string>::iterator it = msg.args.begin(); it < msg.args.end(); it++)
-								std::cout << "arg: " << *it << "\n";
-							std::cout << "\n";
-
 							pos = _clients[_pfds[i].fd]._partialRecieve.find("\r\n");
 						}
 					}
@@ -822,10 +813,8 @@ void Server::handleJoin(const IRCmessage& msg, int fd)
 			joinmsg = JoinParse(msg.args[0], "");
 		else
 			joinmsg = JoinParse(msg.args[0], msg.args[1]);
-		std::cout << "CHECK: joinmsg.channel.size(): " << joinmsg.channel.size() << std::endl; // printcheck delete later
 		for (size_t i = 0; i < joinmsg.channel.size(); ++i)
 		{
-			std::cout << "CHECK: channel: " << joinmsg.channel[i] << std::endl; // printcheck, delete later
 			if (joinmsg.channel[i].empty() || (joinmsg.channel[i][0] != '#' && joinmsg.channel[i][0] != '&'))
 			{
 				polloutMessage(":ircserv 476 " + _clients[fd].getNick() + " " + joinmsg.channel[i] + " :Bad Channel Mask\r\n", fd);
@@ -1095,7 +1084,7 @@ void Server::disconnectClient(int fd)
 	std::vector<pollfd>::iterator it = _pfds.begin();
 	while (it != _pfds.end() && it->fd != fd)
 		it++;
-	std::cout << "Client " << fd << " disconnected\n";
+	std::cout << "Client disconnected from fd " << fd << "\n";
 	for (std::map<std::string, Channel*>::iterator ch = _clients[fd]._channels.begin(); ch != _clients[fd]._channels.end(); ch++)
 	{
 		std::vector<Client *>::iterator cli = std::find(ch->second->_clients.begin(), ch->second->_clients.end(), &_clients[fd]);

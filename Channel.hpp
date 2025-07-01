@@ -1,5 +1,6 @@
 #pragma once
 #include <vector>
+#include <algorithm> // for std::find
 #include "Client.hpp"
 //#include <bits/stdc++.h>  // ON for Linux, OFF for mac
 
@@ -40,5 +41,4 @@ class Channel
 		bool isTopicProtected;
 		void setTopic(std::string topic, std::string setBy, std::string setAt);
 		std::string getTopic(std::string which);
-
 };

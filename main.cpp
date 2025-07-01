@@ -18,7 +18,7 @@ bool quit = false;
 void signalhandler(int sig)
 {
 	(void)sig;
-	std::cout <<"sig\n";
+	std::cout <<"signal recieved\n";
 	quit = true;
 }
 
@@ -43,7 +43,8 @@ int main(int argc, char** argv)
 	}
 	catch (std::exception &e)
 	{
-		std::cout << e.what();
+		std::cout << e.what() << std::endl;
 	}
+	std::cout << "exiting\n";
 	return (0);
 }

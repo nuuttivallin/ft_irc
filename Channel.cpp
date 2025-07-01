@@ -1,6 +1,16 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   Channel.cpp                                        :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: nvallin <nvallin@student.hive.fi>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2025/07/01 16:18:09 by nvallin           #+#    #+#             */
+/*   Updated: 2025/07/01 16:18:24 by nvallin          ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 #include "Channel.hpp"
-#include <algorithm> // for std::find
-#include <sys/socket.h>  // for send()
 
 bool Channel::isOperator(int clientFd)
 {
